@@ -9,3 +9,4 @@ instance/
 .coverage
 htmlcov/
 uploads/
+*.log
