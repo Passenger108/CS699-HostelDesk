@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { fetchMyProfile } from '../../api/profile';
+import { ErrorMessage } from '../../components/ErrorMessage';
 import type { StudentProfile, WorkerProfile } from '../../types/profile';
 import type { User } from '../../types/user';
 
@@ -65,13 +66,13 @@ function AccountDetails({ user }: { user: User }) {
 }
 
 export function ProfilePage() {
-  const { data, isPending, isError } = useQuery({
+  const { data, isPending, isError, error } = useQuery({
     queryKey: ['me', 'profile'],
     queryFn: fetchMyProfile,
   });
 
   if (isPending) return <p className="page-loading">Loading…</p>;
-  if (isError) return <p className="error" role="alert">Could not load your profile.</p>;
+  if (isError) return <ErrorMessage error={error} fallback="Could not load your profile." />;
 
   const { user, profile } = data;
   return (
