@@ -37,6 +37,7 @@ def create_app(config_name: str | None = None) -> Flask:
 def _register_blueprints(app: Flask) -> None:
     from app.auth import guards  # noqa: F401
     from app.auth.routes import bp as auth_bp
+    from app.credits.routes import bp as credits_bp
     from app.hostel_structure.routes import bp as hostel_bp
     from app.users.routes import bp as users_bp
 
@@ -49,4 +50,5 @@ def _register_blueprints(app: Flask) -> None:
     api.register_blueprint(auth_bp)
     api.register_blueprint(users_bp)
     api.register_blueprint(hostel_bp)
+    api.register_blueprint(credits_bp)
     app.register_blueprint(api)
