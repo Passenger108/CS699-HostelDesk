@@ -51,6 +51,23 @@ describe('Hostel structure page', () => {
     expect(screen.getByRole('list', { name: 'Floor 1, Wing A rooms' })).toHaveTextContent('A101A102');
   });
 
+  it('shows the server message when the structure is not set up', async () => {
+    mockApi(
+      { '/me': { user: user('SUPER_ADMIN'), profile: null } },
+      {
+        '/hostel/structure': [
+          404,
+          'HOSTEL_NOT_FOUND',
+          'The hostel structure has not been set up yet.',
+        ],
+      },
+    );
+    renderSignedIn('/structure');
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'The hostel structure has not been set up yet.',
+    );
+  });
+
   it('is not available to other roles', async () => {
     mockApi({ '/me': { user: user('STUDENT'), profile: null } });
     renderSignedIn('/structure');

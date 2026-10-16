@@ -1,6 +1,8 @@
 import { Route, Routes } from 'react-router-dom';
 import { LoginPage } from '../features/auth/LoginPage';
+import { CreditsPage } from '../features/credits/CreditsPage';
 import { HostelStructurePage } from '../features/hostel/HostelStructurePage';
+import { HomePage } from '../features/home/HomePage';
 import { ProfilePage } from '../features/profile/ProfilePage';
 import { SectionPage } from '../pages/SectionPage';
 import { AppShell } from './AppShell';
@@ -13,7 +15,16 @@ export function AppRoutes() {
       <Route path="/login" element={<LoginPage />} />
       <Route element={<RequireAuth />}>
         <Route element={<AppShell />}>
+          <Route path="/" element={<HomePage />} />
           <Route path="/settings" element={<ProfilePage />} />
+          <Route
+            path="/credits"
+            element={
+              <RequireRole roles={['STUDENT']}>
+                <CreditsPage />
+              </RequireRole>
+            }
+          />
           <Route
             path="/structure"
             element={

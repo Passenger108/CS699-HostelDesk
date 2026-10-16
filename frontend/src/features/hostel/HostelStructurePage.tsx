@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { fetchHostelStructure } from '../../api/hostel';
+import { ErrorMessage } from '../../components/ErrorMessage';
 import type { FloorNode } from '../../types/hostel';
 
 function roomCount(floor: FloorNode) {
@@ -44,13 +45,13 @@ function FloorSection({ floor }: { floor: FloorNode }) {
 }
 
 export function HostelStructurePage() {
-  const { data, isPending, isError } = useQuery({
+  const { data, isPending, isError, error } = useQuery({
     queryKey: ['hostel', 'structure'],
     queryFn: fetchHostelStructure,
   });
 
   if (isPending) return <p className="page-loading">Loading…</p>;
-  if (isError) return <p className="error" role="alert">Could not load the hostel structure.</p>;
+  if (isError) return <ErrorMessage error={error} fallback="Could not load the hostel structure." />;
 
   const residential = data.floors.filter((floor) => floor.number > 0);
   const rooms = data.floors.reduce((total, floor) => total + roomCount(floor), 0);
