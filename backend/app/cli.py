@@ -1,7 +1,11 @@
+from datetime import datetime, time
+
 import click
 from flask import Flask
 
 from app.auth.passwords import hash_password
+from app.common.time import HOSTEL_TZ
+from app.credits.service import grant_weekly_credits
 from app.extensions import db
 from app.hostel_structure.service import HOSTEL_4, find_room, seed_hostel_4
 from app.users.models import Role, StudentProfile, User, WorkerProfile
@@ -72,5 +76,28 @@ def register_cli(app: Flask) -> None:
             db.session.add(user)
             _seed_profile(user)
             click.echo(f"created  {login_id}")
+        db.session.flush()
+        summary = grant_weekly_credits()
         db.session.commit()
+        click.echo(f"Weekly credits: {_summary_text(summary)}")
         click.echo(f"Demo password for all accounts: {DEMO_PASSWORD}")
+
+    @app.cli.command("grant-weekly-credits")
+    @click.option(
+        "--date",
+        "on_date",
+        type=click.DateTime(formats=["%Y-%m-%d"]),
+        help="Run as if it were this date (YYYY-MM-DD), for demos and testing.",
+    )
+    def grant_weekly_credits_command(on_date):
+        now = datetime.combine(on_date.date(), time(12), tzinfo=HOSTEL_TZ) if on_date else None
+        summary = grant_weekly_credits(now)
+        db.session.commit()
+        click.echo(f"Weekly credits: {_summary_text(summary)}")
+
+
+def _summary_text(summary: dict) -> str:
+    return (
+        f"{summary['granted']} granted, {summary['capped']} at the limit, "
+        f"{summary['already']} already had this week's credit"
+    )
