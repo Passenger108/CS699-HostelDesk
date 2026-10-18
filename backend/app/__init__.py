@@ -20,6 +20,7 @@ def create_app(config_name: str | None = None) -> Flask:
     limiter.init_app(app)
     cors.init_app(app, resources={r"/api/*": {"origins": app.config["CORS_ORIGINS"]}})
 
+    from app.cleaning import models as cleaning_models  # noqa: F401
     from app.common import audit, settings  # noqa: F401
     from app.common.errors import register_error_handlers
     from app.credits import models as credit_models  # noqa: F401

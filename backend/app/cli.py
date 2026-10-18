@@ -39,6 +39,11 @@ DEMO_WORKERS = {
 }
 
 
+def _demo_phone(login_id: str) -> str:
+    position = [entry[0] for entry in DEMO_USERS].index(login_id) + 1
+    return f"+91 90000 {position:05d}"
+
+
 def _seed_profile(user: User) -> bool:
     if user.login_id in DEMO_STUDENTS and user.student_profile is None:
         roll_number, room_number = DEMO_STUDENTS[user.login_id]
@@ -64,13 +69,17 @@ def register_cli(app: Flask) -> None:
         for login_id, role, name in DEMO_USERS:
             user = db.session.scalar(db.select(User).filter_by(login_id=login_id))
             if user:
-                status = "profile " if _seed_profile(user) else "exists  "
+                added_phone = user.phone is None
+                if added_phone:
+                    user.phone = _demo_phone(login_id)
+                status = "updated " if _seed_profile(user) or added_phone else "exists  "
                 click.echo(f"{status} {login_id}")
                 continue
             user = User(
                 login_id=login_id,
                 role=role,
                 name=name,
+                phone=_demo_phone(login_id),
                 password_hash=hash_password(DEMO_PASSWORD),
             )
             db.session.add(user)
