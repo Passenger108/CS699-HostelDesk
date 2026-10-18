@@ -1,15 +1,13 @@
 import { SectionPage } from '../../pages/SectionPage';
 import { useAuth } from '../auth/AuthContext';
+import { ActiveRequestCard } from '../cleaning/ActiveRequestCard';
 import { CreditsCard } from '../credits/CreditsCard';
 
 function StudentHome() {
   return (
     <div className="stack">
       <h1>Home</h1>
-      <section className="card">
-        <h2>Room cleaning</h2>
-        <p className="muted">Requesting a cleaning is not available yet.</p>
-      </section>
+      <ActiveRequestCard />
       <CreditsCard />
     </div>
   );

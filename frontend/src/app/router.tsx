@@ -1,5 +1,6 @@
 import { Route, Routes } from 'react-router-dom';
 import { LoginPage } from '../features/auth/LoginPage';
+import { RequestCleaningPage } from '../features/cleaning/RequestCleaningPage';
 import { CreditsPage } from '../features/credits/CreditsPage';
 import { HostelStructurePage } from '../features/hostel/HostelStructurePage';
 import { HomePage } from '../features/home/HomePage';
@@ -22,6 +23,14 @@ export function AppRoutes() {
             element={
               <RequireRole roles={['STUDENT']}>
                 <CreditsPage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/request"
+            element={
+              <RequireRole roles={['STUDENT']}>
+                <RequestCleaningPage />
               </RequireRole>
             }
           />
