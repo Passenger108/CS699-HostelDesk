@@ -3,8 +3,8 @@ import pytest
 from app import create_app
 from app.auth.passwords import hash_password
 from app.extensions import db as _db
-from app.hostel_structure.service import seed_hostel
-from app.users.models import Role, User
+from app.hostel_structure.service import find_room, seed_hostel
+from app.users.models import Role, StudentProfile, User
 
 PASSWORD = "correct-horse-battery"
 
@@ -70,3 +70,20 @@ def auth_get(client, login):
         return client.get(url, headers={"Authorization": f"Bearer {token}"})
 
     return _get
+
+
+@pytest.fixture
+def resident(make_user, hostel):
+    user = make_user(login_id="resident", role=Role.STUDENT, phone="+91 90000 11111")
+    user.student_profile = StudentProfile(roll_number="24B0101", room=find_room("A102"))
+    _db.session.commit()
+    return user
+
+
+@pytest.fixture
+def auth_post(client, login):
+    def _post(url, json=None, login_id="student1"):
+        token = login(login_id).get_json()["access_token"]
+        return client.post(url, json=json, headers={"Authorization": f"Bearer {token}"})
+
+    return _post
