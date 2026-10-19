@@ -13,3 +13,9 @@ const day = new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeZone: 'U
 export function formatDay(isoDate: string): string {
   return day.format(new Date(`${isoDate}T00:00:00Z`));
 }
+
+const clock = new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/Kolkata', timeStyle: 'short' });
+
+export function formatTime(iso: string): string {
+  return clock.format(new Date(iso));
+}

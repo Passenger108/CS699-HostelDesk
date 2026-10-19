@@ -35,7 +35,7 @@ class CreditEntry(IdMixin, db.Model):
         Enum(CreditType, name="credit_type"), nullable=False
     )
     quantity: Mapped[int] = mapped_column(nullable=False)
-    request_id: Mapped[int | None] = mapped_column(index=True)
+    request_id: Mapped[int | None] = mapped_column(ForeignKey("cleaning_requests.id"), index=True)
     actor_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     reason: Mapped[str] = mapped_column(String(500), nullable=False)
     grant_week: Mapped[date | None] = mapped_column(Date)

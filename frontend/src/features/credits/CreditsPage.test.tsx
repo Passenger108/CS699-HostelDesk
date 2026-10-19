@@ -95,7 +95,11 @@ describe('Credits', () => {
   });
 
   it('shows a credits card on the student home page', async () => {
-    mockApi({ '/me': { user: student, profile: null }, '/me/credits': credits });
+    mockApi({
+      '/me': { user: student, profile: null },
+      '/me/credits': credits,
+      '/cleaning/requests/active': { request: null },
+    });
     renderSignedIn('/');
     expect(await screen.findByRole('heading', { name: 'Cleaning credits' })).toBeInTheDocument();
     expect(await screen.findByText('available')).toBeInTheDocument();

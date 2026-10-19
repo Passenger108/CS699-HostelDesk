@@ -20,6 +20,7 @@ def create_app(config_name: str | None = None) -> Flask:
     limiter.init_app(app)
     cors.init_app(app, resources={r"/api/*": {"origins": app.config["CORS_ORIGINS"]}})
 
+    from app.cleaning import models as cleaning_models  # noqa: F401
     from app.common import audit, settings  # noqa: F401
     from app.common.errors import register_error_handlers
     from app.credits import models as credit_models  # noqa: F401
@@ -37,6 +38,7 @@ def create_app(config_name: str | None = None) -> Flask:
 def _register_blueprints(app: Flask) -> None:
     from app.auth import guards  # noqa: F401
     from app.auth.routes import bp as auth_bp
+    from app.cleaning.routes import bp as cleaning_bp
     from app.credits.routes import bp as credits_bp
     from app.hostel_structure.routes import bp as hostel_bp
     from app.users.routes import bp as users_bp
@@ -51,4 +53,5 @@ def _register_blueprints(app: Flask) -> None:
     api.register_blueprint(users_bp)
     api.register_blueprint(hostel_bp)
     api.register_blueprint(credits_bp)
+    api.register_blueprint(cleaning_bp)
     app.register_blueprint(api)
