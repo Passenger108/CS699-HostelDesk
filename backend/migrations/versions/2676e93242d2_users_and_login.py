@@ -40,3 +40,5 @@ def upgrade():
 
 def downgrade():
     op.drop_table('users')
+    for name in ("user_role", "user_locale", "account_status"):
+        sa.Enum(name=name).drop(op.get_bind(), checkfirst=True)
