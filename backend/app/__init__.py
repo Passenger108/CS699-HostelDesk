@@ -42,6 +42,7 @@ def _register_blueprints(app: Flask) -> None:
     from app.cleaning.routes import bp as cleaning_bp
     from app.credits.routes import bp as credits_bp
     from app.hostel_structure.routes import bp as hostel_bp
+    from app.notifications.routes import bp as notifications_bp
     from app.users.routes import bp as users_bp
 
     api = Blueprint("api", __name__, url_prefix="/api/v1")
@@ -55,4 +56,5 @@ def _register_blueprints(app: Flask) -> None:
     api.register_blueprint(hostel_bp)
     api.register_blueprint(credits_bp)
     api.register_blueprint(cleaning_bp)
+    api.register_blueprint(notifications_bp)
     app.register_blueprint(api)
