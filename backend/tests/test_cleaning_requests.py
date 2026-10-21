@@ -1,15 +1,23 @@
 from datetime import datetime, timedelta
 
 import pytest
+from sqlalchemy.orm.attributes import set_committed_value
 
-from app.cleaning.models import AvailabilityMode, CreditReservation, Priority, RequestStatus
+from app.cleaning import service
+from app.cleaning.models import (
+    AvailabilityMode,
+    CleaningRequest,
+    CreditReservation,
+    Priority,
+    RequestStatus,
+)
 from app.cleaning.service import active_request, cancel_by_student, submit_request
 from app.cleaning.workflow import transition
 from app.common.audit import AuditLog
 from app.common.errors import ApiError
 from app.common.models import as_utc
 from app.common.time import HOSTEL_TZ
-from app.credits.service import balance, grant_weekly_credit
+from app.credits.service import balance, grant_goodwill, grant_weekly_credit
 from app.extensions import db
 from app.users.models import Role
 
@@ -205,3 +213,95 @@ def test_expired_request_frees_the_student(credited):
     transition(request, RequestStatus.EXPIRED)
     db.session.commit()
     assert active_request(credited) is None
+
+
+def test_urgent_request_never_spends_goodwill(resident, make_user):
+    supervisor = make_user(login_id="sup", role=Role.SUPERVISOR)
+    grant_goodwill(resident, supervisor, "Valid complaint", now=NOW)
+    request = submit(resident, priority="URGENT", urgent_reason="Leak")
+    assert request.credit_reservation == CreditReservation.NONE
+    assert balance(resident.id, NOW)["goodwill_available"] == 1
+
+
+def test_normal_request_uses_goodwill(resident, make_user):
+    supervisor = make_user(login_id="sup", role=Role.SUPERVISOR)
+    grant_goodwill(resident, supervisor, "Valid complaint", now=NOW)
+    request = submit(resident)
+    assert request.credit_reservation == CreditReservation.RESERVED
+    assert balance(resident.id, NOW)["goodwill_available"] == 0
+
+
+def test_long_client_key_is_refused(credited):
+    err = error_of(submit, credited, client_key="k" * 65)
+    assert (err.status, err.code, err.field) == (400, "INVALID_FIELD", "client_key")
+
+
+def test_lost_race_with_the_same_key_returns_the_first_request(credited, monkeypatch):
+    first, _ = submit_request(credited, availability_mode="ANY_TIME_TODAY", client_key="k", now=NOW)
+    grant_weekly_credit(credited, NOW + timedelta(weeks=1))
+    monkeypatch.setattr(service, "_earlier_submit", _miss_once(service._earlier_submit))
+    monkeypatch.setattr(service, "active_request", lambda student: None)
+    again, created = submit_request(
+        credited, availability_mode="ANY_TIME_TODAY", client_key="k", now=NOW
+    )
+    assert (again.id, created) == (first.id, False)
+
+
+def _miss_once(real):
+    calls = []
+
+    def fake(student, key):
+        calls.append(key)
+        return None if len(calls) == 1 else real(student, key)
+
+    return fake
+
+
+def test_lost_race_without_a_key_is_a_409(credited, monkeypatch):
+    submit(credited)
+    grant_weekly_credit(credited, NOW + timedelta(weeks=1))
+    monkeypatch.setattr(service, "active_request", lambda student: None)
+    err = error_of(submit, credited)
+    assert (err.status, err.code) == (409, "ACTIVE_REQUEST_EXISTS")
+
+
+def _changed_by_someone_else(request, **values):
+    seen = {"status": request.status, "lock_version": request.lock_version}
+    db.session.execute(
+        db.update(CleaningRequest)
+        .where(CleaningRequest.id == request.id)
+        .values(lock_version=CleaningRequest.lock_version + 1, **values)
+    )
+    db.session.commit()
+    for key, value in seen.items():
+        set_committed_value(request, key, value)
+
+
+def test_cancel_that_loses_a_race_to_another_cancel_still_succeeds(credited):
+    request = submit(credited)
+    _changed_by_someone_else(
+        request, status=RequestStatus.CANCELLED_BY_STUDENT, active_student_id=None
+    )
+    result = cancel_by_student(request, credited)
+    assert result.status == RequestStatus.CANCELLED_BY_STUDENT
+
+
+def test_cancel_that_loses_a_race_to_another_change_is_a_409(credited):
+    request = submit(credited)
+    _changed_by_someone_else(request)
+    err = error_of(cancel_by_student, request, credited)
+    assert (err.status, err.code) == (409, "STALE_REQUEST")
+    assert balance(credited.id, NOW)["reserved"] == 1
+
+
+def test_request_in_the_last_second_of_the_day_is_refused(credited):
+    late = datetime(2026, 10, 19, 23, 59, 59, 500000, tzinfo=HOSTEL_TZ)
+    err = error_of(submit, credited, now=late)
+    assert (err.code, err.field) == ("INVALID_AVAILABILITY", "availability_mode")
+
+
+def test_errors_name_the_field(credited):
+    assert error_of(submit, credited, note="x" * 501).field == "note"
+    assert error_of(submit, credited, priority="URGENT").field == "urgent_reason"
+    window = {"availability_mode": "TIME_WINDOW", "window_start": "15:00", "window_end": "14:00"}
+    assert error_of(submit, credited, **window).field == "window_end"
