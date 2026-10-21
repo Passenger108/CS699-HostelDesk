@@ -1,12 +1,13 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { cancelCleaningRequest, fetchActiveRequest } from '../../api/cleaning';
-import { ErrorMessage } from '../../components/ErrorMessage';
-import type { CleaningRequest } from '../../types/cleaning';
-import { PRIORITY_LABELS, availabilityText } from './labels';
-import { RequestTimeline } from './RequestTimeline';
-import { StatusChip } from './StatusChip';
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import { cancelCleaningRequest, fetchActiveRequest } from "../../api/cleaning";
+import { ApiError } from "../../api/client";
+import { ErrorMessage } from "../../components/ErrorMessage";
+import type { CleaningRequest } from "../../types/cleaning";
+import { PRIORITY_LABELS, availabilityText } from "./labels";
+import { RequestTimeline } from "./RequestTimeline";
+import { StatusChip } from "./StatusChip";
 
 function CancelControl({ request }: { request: CleaningRequest }) {
   const queryClient = useQueryClient();
@@ -15,14 +16,24 @@ function CancelControl({ request }: { request: CleaningRequest }) {
     mutationFn: () => cancelCleaningRequest(request.id),
     onSuccess: () => {
       setConfirming(false);
-      queryClient.invalidateQueries({ queryKey: ['cleaning', 'active'] });
-      queryClient.invalidateQueries({ queryKey: ['credits'] });
+      queryClient.invalidateQueries({ queryKey: ["cleaning"] });
+      queryClient.invalidateQueries({ queryKey: ["credits"] });
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    },
+    onError: (error) => {
+      if (error instanceof ApiError && error.status === 409) {
+        queryClient.invalidateQueries({ queryKey: ["cleaning"] });
+      }
     },
   });
 
   if (!confirming) {
     return (
-      <button type="button" className="btn btn--ghost" onClick={() => setConfirming(true)}>
+      <button
+        type="button"
+        className="btn btn--ghost"
+        onClick={() => setConfirming(true)}
+      >
         Cancel request
       </button>
     );
@@ -31,7 +42,8 @@ function CancelControl({ request }: { request: CleaningRequest }) {
     <div className="confirm" role="group" aria-label="Confirm cancel">
       <p>
         Cancel this request?
-        {request.credit_reservation === 'RESERVED' && ' Your credit will be returned.'}
+        {request.credit_reservation === "RESERVED" &&
+          " Your credit will be returned."}
       </p>
       <div className="confirm__buttons">
         <button
@@ -40,23 +52,33 @@ function CancelControl({ request }: { request: CleaningRequest }) {
           disabled={cancel.isPending}
           onClick={() => cancel.mutate()}
         >
-          {cancel.isPending ? 'Cancelling…' : 'Yes, cancel'}
+          {cancel.isPending ? "Cancelling…" : "Yes, cancel"}
         </button>
-        <button type="button" className="btn btn--ghost" onClick={() => setConfirming(false)}>
+        <button
+          type="button"
+          className="btn btn--ghost"
+          disabled={cancel.isPending}
+          onClick={() => setConfirming(false)}
+        >
           Keep request
         </button>
       </div>
-      {cancel.isError && <ErrorMessage error={cancel.error} fallback="Could not cancel. Try again." />}
+      {cancel.isError && (
+        <ErrorMessage
+          error={cancel.error}
+          fallback="Could not cancel. Try again."
+        />
+      )}
     </div>
   );
 }
 
-function RequestDetails({ request }: { request: CleaningRequest }) {
+export function RequestDetails({ request }: { request: CleaningRequest }) {
   return (
     <>
       <div className="request-card__head">
         <StatusChip request={request} />
-        {request.priority !== 'NORMAL' && (
+        {request.priority !== "NORMAL" && (
           <span className="chip">{PRIORITY_LABELS[request.priority]}</span>
         )}
       </div>
@@ -64,7 +86,8 @@ function RequestDetails({ request }: { request: CleaningRequest }) {
         <div className="field">
           <dt>Room</dt>
           <dd>
-            {request.room.number} · {request.room.floor_label}, Wing {request.room.wing}
+            {request.room.number} · {request.room.floor_label}, Wing{" "}
+            {request.room.wing}
           </dd>
         </div>
         <div className="field">
@@ -73,20 +96,26 @@ function RequestDetails({ request }: { request: CleaningRequest }) {
         </div>
         <div className="field">
           <dt>Credit</dt>
-          <dd>{request.credit_reservation === 'RESERVED' ? '1 reserved' : 'None used'}</dd>
+          <dd>
+            {request.credit_reservation === "RESERVED"
+              ? "1 reserved"
+              : "None used"}
+          </dd>
         </div>
       </dl>
       {request.note && <p className="request-card__note">“{request.note}”</p>}
       <h3>Timeline</h3>
       <RequestTimeline events={request.timeline} />
-      {request.actions.includes('cancel') && <CancelControl request={request} />}
+      {request.actions.includes("cancel") && (
+        <CancelControl request={request} />
+      )}
     </>
   );
 }
 
 export function ActiveRequestCard() {
   const { data, isPending, isError, error } = useQuery({
-    queryKey: ['cleaning', 'active'],
+    queryKey: ["cleaning", "active"],
     queryFn: fetchActiveRequest,
     refetchInterval: 15_000,
   });
@@ -95,7 +124,9 @@ export function ActiveRequestCard() {
     <section className="card request-card">
       <h2>Room cleaning</h2>
       {isPending && <p className="muted">Loading…</p>}
-      {isError && <ErrorMessage error={error} fallback="Could not load your request." />}
+      {isError && (
+        <ErrorMessage error={error} fallback="Could not load your request." />
+      )}
       {data && data.request && <RequestDetails request={data.request} />}
       {data && !data.request && (
         <>
