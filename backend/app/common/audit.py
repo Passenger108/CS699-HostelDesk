@@ -51,3 +51,12 @@ def record_audit(
     )
     db.session.add(entry)
     return entry
+
+
+def record_security_event(
+    action: str, entity_type: str, entity_id: Any = None, actor=None, detail: Any = None
+) -> AuditLog:
+    db.session.rollback()
+    entry = record_audit(action, entity_type, entity_id, actor=actor, after=detail)
+    db.session.commit()
+    return entry

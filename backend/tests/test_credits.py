@@ -2,6 +2,13 @@ from datetime import datetime, timedelta
 
 import pytest
 
+from app.cleaning.models import (
+    AvailabilityMode,
+    CleaningRequest,
+    CreditReservation,
+    Priority,
+    RequestStatus,
+)
 from app.common.errors import ApiError
 from app.common.settings import set_setting
 from app.common.time import HOSTEL_TZ
@@ -17,6 +24,7 @@ from app.credits.service import (
     reserve_credit,
 )
 from app.extensions import db
+from app.hostel_structure.service import find_room
 from app.users.models import AccountStatus, Role
 
 MONDAY = datetime(2026, 10, 19, 9, 0, tzinfo=HOSTEL_TZ)
@@ -27,8 +35,26 @@ def week(n):
 
 
 @pytest.fixture
-def student(make_user):
-    return make_user(login_id="stu", role=Role.STUDENT)
+def student(make_user, hostel):
+    user = make_user(login_id="stu", role=Role.STUDENT)
+    room = find_room("A101")
+    for request_id in (1, 3, 7):
+        db.session.add(
+            CleaningRequest(
+                id=request_id,
+                student=user,
+                room=room,
+                room_snapshot={"number": room.number},
+                contact_phone="+91 90000 33333",
+                status=RequestStatus.EXPIRED,
+                priority=Priority.NORMAL,
+                availability_mode=AvailabilityMode.ANY_TIME_TODAY,
+                available_until=MONDAY,
+                credit_reservation=CreditReservation.NONE,
+            )
+        )
+    db.session.commit()
+    return user
 
 
 @pytest.fixture
@@ -178,3 +204,29 @@ def test_history_is_newest_first(student):
     reserve_credit(student, request_id=3, now=MONDAY)
     types = [row["entry_type"] for row in history(student.id)]
     assert types == ["RESERVE", "WEEKLY_GRANT"]
+
+
+def test_expired_goodwill_does_not_come_back(student, supervisor):
+    grant_goodwill(student, supervisor, "First complaint", now=MONDAY)
+    grant_goodwill(student, supervisor, "Second complaint", now=week(1))
+    reserve_credit(student, request_id=1, now=week(1))
+    current = balance(student.id, week(1))
+    assert (current["goodwill_available"], current["reserved"]) == (0, 1)
+
+
+def test_released_goodwill_after_expiry_is_gone(student, supervisor):
+    wednesday = MONDAY + timedelta(days=2)
+    grant_goodwill(student, supervisor, "Complaint", now=wednesday)
+    reserve_credit(student, request_id=1, now=wednesday)
+    release_credit(student, request_id=1, reason="Cancelled")
+    assert balance(student.id, wednesday)["goodwill_available"] == 1
+    assert balance(student.id, week(1))["goodwill_available"] == 0
+
+
+def test_goodwill_can_be_kept_for_a_normal_request(student, supervisor):
+    grant_weekly_credit(student, MONDAY)
+    grant_goodwill(student, supervisor, "Complaint", now=MONDAY)
+    assert reserve_credit(student, request_id=1, now=MONDAY, allow_goodwill=False) == (
+        CreditType.STANDARD
+    )
+    assert balance(student.id, MONDAY)["goodwill_available"] == 1

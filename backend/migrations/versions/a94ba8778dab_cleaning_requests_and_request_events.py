@@ -88,3 +88,5 @@ def downgrade():
         batch_op.drop_index(batch_op.f('ix_cleaning_requests_status'))
 
     op.drop_table('cleaning_requests')
+    for name in ("request_status", "request_priority", "availability_mode", "credit_reservation"):
+        sa.Enum(name=name).drop(op.get_bind(), checkfirst=True)

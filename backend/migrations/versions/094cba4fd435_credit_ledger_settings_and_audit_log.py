@@ -80,3 +80,5 @@ def downgrade():
         batch_op.drop_index(batch_op.f('ix_audit_logs_action'))
 
     op.drop_table('audit_logs')
+    for name in ("credit_entry_type", "credit_type"):
+        sa.Enum(name=name).drop(op.get_bind(), checkfirst=True)

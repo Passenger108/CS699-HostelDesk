@@ -24,6 +24,7 @@ def create_app(config_name: str | None = None) -> Flask:
     from app.common import audit, settings  # noqa: F401
     from app.common.errors import register_error_handlers
     from app.credits import models as credit_models  # noqa: F401
+    from app.notifications import models as notification_models  # noqa: F401
     from app.users import models  # noqa: F401
 
     register_error_handlers(app)
@@ -41,6 +42,7 @@ def _register_blueprints(app: Flask) -> None:
     from app.cleaning.routes import bp as cleaning_bp
     from app.credits.routes import bp as credits_bp
     from app.hostel_structure.routes import bp as hostel_bp
+    from app.notifications.routes import bp as notifications_bp
     from app.users.routes import bp as users_bp
 
     api = Blueprint("api", __name__, url_prefix="/api/v1")
@@ -54,4 +56,5 @@ def _register_blueprints(app: Flask) -> None:
     api.register_blueprint(hostel_bp)
     api.register_blueprint(credits_bp)
     api.register_blueprint(cleaning_bp)
+    api.register_blueprint(notifications_bp)
     app.register_blueprint(api)

@@ -1,6 +1,7 @@
 import pytest
 
 from app.cleaning.models import CleaningRequest, RequestStatus
+from app.common.audit import AuditLog
 from app.common.time import hostel_now
 from app.credits.service import grant_weekly_credit
 from app.extensions import db
@@ -168,3 +169,30 @@ def test_login_required(client):
     assert client.post(URL, json={}).status_code == 401
     assert client.get(f"{URL}/active").status_code == 401
     assert client.get(f"{URL}/1").status_code == 401
+
+
+def test_errors_say_which_field_is_wrong(credited, post):
+    res = post(json={"availability_mode": "AVAILABLE_NOW", "priority": "URGENT"})
+    assert res.status_code == 400
+    assert res.get_json()["error"]["field"] == "urgent_reason"
+    res = post(json={"availability_mode": "SOON"})
+    assert res.get_json()["error"]["field"] == "availability_mode"
+
+
+def test_looking_at_someone_elses_request_is_audited(credited, post, get, make_user):
+    request_id = post(json={"availability_mode": "AVAILABLE_NOW"}).get_json()["request"]["id"]
+    other = make_user(login_id="other", role=Role.STUDENT)
+    assert get(f"{URL}/{request_id}", login_id="other").status_code == 404
+    entry = db.session.scalar(db.select(AuditLog).filter_by(action="ACCESS_DENIED"))
+    assert (entry.actor_id, entry.entity_id) == (other.id, str(request_id))
+    assert get(f"{URL}/999", login_id="other").status_code == 404
+    count = db.session.scalar(
+        db.select(db.func.count(AuditLog.id)).filter_by(action="ACCESS_DENIED")
+    )
+    assert count == 1
+
+
+def test_wrong_role_is_audited(credited, post, make_user):
+    make_user(login_id="worker", role=Role.WORKER)
+    assert post(json={"availability_mode": "AVAILABLE_NOW"}, login_id="worker").status_code == 403
+    assert db.session.scalar(db.select(AuditLog).filter_by(action="FORBIDDEN"))

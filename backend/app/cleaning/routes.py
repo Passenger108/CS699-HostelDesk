@@ -5,6 +5,7 @@ from app.cleaning.service import (
     active_request,
     cancel_by_student,
     get_request_for,
+    list_requests,
     request_dict,
     submit_request,
 )
@@ -51,6 +52,22 @@ def create_request():
         client_key=body.get("client_key") or request.headers.get("Idempotency-Key"),
     )
     return jsonify({"request": request_dict(cleaning_request, student)}), 201 if created else 200
+
+
+@bp.get("/requests")
+@login_required
+def all_requests():
+    args = request.args
+    return jsonify(
+        list_requests(
+            current_user(),
+            status=args.get("status"),
+            floor=args.get("floor"),
+            priority=args.get("priority"),
+            page=args.get("page"),
+            per_page=args.get("per_page"),
+        )
+    )
 
 
 @bp.get("/requests/active")

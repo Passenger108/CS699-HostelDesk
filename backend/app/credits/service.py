@@ -41,13 +41,29 @@ def _pool(totals: dict, credit_type: CreditType) -> dict:
     }
 
 
-def _unexpired_goodwill_grants(student_id: int, now: datetime) -> int:
-    grants = db.session.scalars(
-        db.select(CreditEntry.expires_at).filter_by(
-            student_id=student_id, entry_type=E.GOODWILL_GRANT
-        )
+def _usable_goodwill(student_id: int, now: datetime) -> int:
+    entries = db.session.scalars(
+        db.select(CreditEntry)
+        .filter_by(student_id=student_id, credit_type=CreditType.GOODWILL)
+        .order_by(CreditEntry.id)
     ).all()
-    return sum(1 for expires_at in grants if as_utc(expires_at) > now)
+    unused: list[datetime] = []
+    held: dict[int | None, datetime] = {}
+    for entry in entries:
+        at = as_utc(entry.created_at)
+        if entry.entry_type == E.GOODWILL_GRANT:
+            unused.append(as_utc(entry.expires_at))
+        elif entry.entry_type == E.RESERVE:
+            unused = sorted(expiry for expiry in unused if expiry > at)
+            if unused:
+                held[entry.request_id] = unused.pop(0)
+        elif entry.entry_type == E.RELEASE:
+            expiry = held.pop(entry.request_id, None)
+            if expiry is not None:
+                unused.append(expiry)
+        elif entry.entry_type == E.CONSUME:
+            held.pop(entry.request_id, None)
+    return sum(1 for expiry in unused if expiry > now)
 
 
 def balance(student_id: int, now: datetime | None = None) -> dict:
@@ -55,9 +71,7 @@ def balance(student_id: int, now: datetime | None = None) -> dict:
     totals = _totals(student_id)
     standard = _pool(totals, CreditType.STANDARD)
     goodwill = _pool(totals, CreditType.GOODWILL)
-    goodwill_available = max(
-        0, min(goodwill["available"], _unexpired_goodwill_grants(student_id, now))
-    )
+    goodwill_available = max(0, min(goodwill["available"], _usable_goodwill(student_id, now)))
     return {
         "available": standard["available"] + goodwill_available,
         "standard_available": standard["available"],
@@ -88,9 +102,16 @@ def _add(
 def expire_goodwill(student_id: int, now: datetime | None = None) -> int:
     now = now or utcnow()
     raw = _pool(_totals(student_id), CreditType.GOODWILL)["available"]
-    expiring = raw - max(0, min(raw, _unexpired_goodwill_grants(student_id, now)))
+    expiring = raw - max(0, min(raw, _usable_goodwill(student_id, now)))
     for _ in range(max(0, expiring)):
-        _add(student_id, E.EXPIRE, CreditType.GOODWILL, 1, "Goodwill credit expired unused")
+        _add(
+            student_id,
+            E.EXPIRE,
+            CreditType.GOODWILL,
+            1,
+            "Goodwill credit expired unused",
+            created_at=now,
+        )
     return max(0, expiring)
 
 
@@ -114,9 +135,18 @@ def grant_weekly_credit(student: User, now: datetime | None = None) -> str:
             0,
             f"Weekly credit not added: limit of {cap} reached",
             grant_week=week,
+            created_at=now,
         )
         return "capped"
-    _add(student.id, E.WEEKLY_GRANT, CreditType.STANDARD, 1, "Weekly credit", grant_week=week)
+    _add(
+        student.id,
+        E.WEEKLY_GRANT,
+        CreditType.STANDARD,
+        1,
+        "Weekly credit",
+        grant_week=week,
+        created_at=now,
+    )
     return "granted"
 
 
@@ -147,6 +177,7 @@ def grant_goodwill(student: User, actor: User, reason: str, now: datetime | None
         reason.strip(),
         actor_id=actor.id,
         expires_at=next_week_start_at(now),
+        created_at=now,
     )
     record_audit(
         "GOODWILL_CREDIT_GRANTED",
@@ -176,12 +207,16 @@ def _outstanding_reservation(student_id: int, request_id: int) -> CreditType | N
 
 
 def reserve_credit(
-    student: User, request_id: int, actor: User | None = None, now: datetime | None = None
+    student: User,
+    request_id: int,
+    actor: User | None = None,
+    now: datetime | None = None,
+    allow_goodwill: bool = True,
 ) -> CreditType:
     if _outstanding_reservation(student.id, request_id):
         raise ApiError(409, "ALREADY_RESERVED", "A credit is already reserved for this request.")
     current = balance(student.id, now)
-    if current["goodwill_available"] > 0:
+    if allow_goodwill and current["goodwill_available"] > 0:
         credit_type = CreditType.GOODWILL
     elif current["standard_available"] > 0:
         credit_type = CreditType.STANDARD
@@ -195,6 +230,7 @@ def reserve_credit(
         "Reserved for a cleaning request",
         request_id=request_id,
         actor_id=actor.id if actor else student.id,
+        created_at=now or utcnow(),
     )
     return credit_type
 

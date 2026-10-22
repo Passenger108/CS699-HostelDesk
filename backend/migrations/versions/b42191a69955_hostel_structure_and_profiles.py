@@ -98,3 +98,5 @@ def downgrade():
     op.drop_table('wings')
     op.drop_table('floors')
     op.drop_table('hostels')
+    for name in ("worker_availability", "location_kind"):
+        sa.Enum(name=name).drop(op.get_bind(), checkfirst=True)
