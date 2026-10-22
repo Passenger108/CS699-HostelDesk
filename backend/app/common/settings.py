@@ -4,7 +4,7 @@ from sqlalchemy import JSON, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.common.audit import record_audit
-from app.common.errors import ApiError
+from app.common.errors import fail
 from app.common.models import IdMixin, TimestampMixin
 from app.extensions import db
 
@@ -40,9 +40,9 @@ def get_setting(key: str) -> Any:
 
 def set_setting(key: str, value: Any, actor, reason: str) -> Setting:
     if key not in DEFAULT_SETTINGS:
-        raise ApiError(400, "UNKNOWN_SETTING", f"There is no setting called {key}.")
+        raise fail("UNKNOWN_SETTING", key=key)
     if not reason or not reason.strip():
-        raise ApiError(400, "REASON_REQUIRED", "A reason is required to change a setting.")
+        raise fail("SETTING_REASON")
     latest = _latest(key)
     old_value = latest.value if latest else DEFAULT_SETTINGS[key]
     setting = Setting(

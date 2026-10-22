@@ -4,7 +4,9 @@ import click
 from flask import Flask
 
 from app.auth.passwords import hash_password
-from app.common.time import HOSTEL_TZ
+from app.cleaning.service import approve_request, submit_request
+from app.common.errors import ApiError
+from app.common.time import HOSTEL_TZ, hostel_now
 from app.credits.service import grant_weekly_credits
 from app.extensions import db
 from app.hostel_structure.service import HOSTEL_4, find_room, seed_hostel_4
@@ -37,6 +39,12 @@ DEMO_WORKERS = {
     "demo.worker2": ("DEMO-W02", "Morning"),
     "demo.worker3": ("DEMO-W03", "Evening"),
 }
+DEMO_REQUESTS = [
+    ("demo.student3", "ANY_TIME_TODAY", "NORMAL", None, False),
+    ("demo.student4", "AVAILABLE_NOW", "URGENT", "Water leaked under the bed", False),
+    ("demo.student5", "ANY_TIME_TODAY", "NORMAL", None, True),
+    ("demo.student6", "AVAILABLE_NOW", "NORMAL", None, False),
+]
 
 
 def _demo_phone(login_id: str) -> str:
@@ -90,6 +98,29 @@ def register_cli(app: Flask) -> None:
         db.session.commit()
         click.echo(f"Weekly credits: {_summary_text(summary)}")
         click.echo(f"Demo password for all accounts: {DEMO_PASSWORD}")
+
+    @app.cli.command("seed-demo-requests")
+    def seed_demo_requests():
+        supervisor = db.session.scalar(db.select(User).filter_by(login_id="demo.supervisor"))
+        if supervisor is None:
+            raise click.ClickException("Run flask seed-demo first.")
+        for login_id, mode, priority, reason, approve in DEMO_REQUESTS:
+            student = db.session.scalar(db.select(User).filter_by(login_id=login_id))
+            try:
+                request, created = submit_request(
+                    student,
+                    mode,
+                    priority=priority,
+                    urgent_reason=reason,
+                    client_key=f"demo-{login_id}-{hostel_now().date()}",
+                )
+                if approve:
+                    approve_request(request, supervisor)
+            except ApiError as err:
+                click.echo(f"skipped  {login_id}: {err.message}")
+                continue
+            status = "created " if created else "exists  "
+            click.echo(f"{status} request {request.id} for {login_id}: {request.status.value}")
 
     @app.cli.command("grant-weekly-credits")
     @click.option(

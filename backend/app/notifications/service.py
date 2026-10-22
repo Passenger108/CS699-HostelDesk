@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from app.common.audit import record_security_event
-from app.common.errors import ApiError
+from app.common.errors import fail
 from app.common.models import as_utc, utcnow
 from app.extensions import db
 from app.notifications.models import Notification
@@ -61,9 +61,9 @@ def _limit(value: str | None) -> int:
     try:
         limit = int(value)
     except ValueError:
-        raise ApiError(400, "INVALID_FILTER", "limit must be a whole number.") from None
+        raise fail("NOT_WHOLE", label="limit") from None
     if not 1 <= limit <= MAX_LIMIT:
-        raise ApiError(400, "INVALID_FILTER", f"limit must be between 1 and {MAX_LIMIT}.")
+        raise fail("OUT_OF_RANGE", label="limit", low=1, high=MAX_LIMIT)
     return limit
 
 
@@ -89,7 +89,7 @@ def get_own_notification(notification_id: int, user: User) -> Notification:
         )
         notification = None
     if notification is None:
-        raise ApiError(404, "NOTIFICATION_NOT_FOUND", "This notification does not exist.")
+        raise fail("NOTIFICATION_NOT_FOUND")
     return notification
 
 

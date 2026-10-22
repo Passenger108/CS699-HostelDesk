@@ -1,4 +1,5 @@
-from datetime import datetime, time, timezone
+from datetime import datetime, time, timedelta, timezone
+from enum import Enum
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
@@ -12,15 +13,18 @@ from app.cleaning.models import (
     RequestStatus,
 )
 from app.cleaning.workflow import (
+    ACTIVE_STATES,
     EVENT_LABELS,
     STATUS_LABELS,
     STUDENT_CANCELLABLE,
+    SUPERVISOR_CHANGEABLE,
     is_terminal,
     record_event,
+    stale,
     transition,
 )
 from app.common.audit import record_audit, record_security_event
-from app.common.errors import ApiError
+from app.common.errors import ApiError, fail
 from app.common.models import as_utc, utcnow
 from app.common.time import HOSTEL_TZ, hostel_now
 from app.credits.service import balance, release_credit, reserve_credit
@@ -34,6 +38,22 @@ TEXT_LIMIT = 500
 KEY_LIMIT = 64
 DEFAULT_PAGE_SIZE = 20
 MAX_PAGE_SIZE = 100
+S = RequestStatus
+SUPERVISOR_ROLES = (Role.SUPERVISOR, Role.SUPER_ADMIN)
+PRIORITY_ORDER = {Priority.EMERGENCY: 0, Priority.URGENT: 1, Priority.NORMAL: 2}
+FAILED_STATES = frozenset(
+    {S.STUDENT_UNAVAILABLE, S.EXPIRED, S.CANCELLED_BY_SUPERVISOR, S.CLOSED_UNSATISFACTORY}
+)
+BOARD_GROUPS = {
+    "urgent": "Urgent and emergency",
+    "new": "New, waiting for approval",
+    "awaiting_assignment": "Waiting for a worker",
+    "offered": "Offered to a worker",
+    "active": "Active",
+    "delayed": "Delayed",
+    "disputed": "Disputed or needs a decision",
+    "failed": "Failed or unavailable today",
+}
 
 
 def _clean_text(value: str | None, field: str, label: str) -> str | None:
@@ -54,16 +74,16 @@ def _parse_time(value: str | None, label: str, field: str) -> time:
     try:
         return time.fromisoformat(value or "")
     except ValueError:
-        raise ApiError(
-            400, "INVALID_AVAILABILITY", f"{label} must be a time like 14:30.", field=field
-        ) from None
+        raise fail("BAD_TIME", field, label=label) from None
+
+
+def _today_at(now: datetime, at: time) -> datetime:
+    local = hostel_now(now)
+    return datetime.combine(local.date(), at, tzinfo=HOSTEL_TZ).astimezone(timezone.utc)
 
 
 def end_of_day(now: datetime) -> datetime:
-    local = hostel_now(now)
-    return datetime.combine(local.date(), time(23, 59, 59), tzinfo=HOSTEL_TZ).astimezone(
-        timezone.utc
-    )
+    return _today_at(now, time(23, 59, 59))
 
 
 def availability_from(
@@ -72,21 +92,11 @@ def availability_from(
     try:
         availability_mode = AvailabilityMode(mode)
     except ValueError:
-        raise ApiError(
-            400,
-            "INVALID_AVAILABILITY",
-            "Choose when you are available: now, a time window or any time today.",
-            field="availability_mode",
-        ) from None
+        raise fail("BAD_MODE", "availability_mode") from None
 
     if availability_mode != AvailabilityMode.TIME_WINDOW:
         if end_of_day(now) <= now:
-            raise ApiError(
-                400,
-                "INVALID_AVAILABILITY",
-                "Today is over. Please send the request again after midnight.",
-                field="availability_mode",
-            )
+            raise fail("DAY_OVER", "availability_mode")
         return {
             "availability_mode": availability_mode,
             "window_start": None,
@@ -101,19 +111,9 @@ def availability_from(
     start = datetime.combine(today, start_time, tzinfo=HOSTEL_TZ)
     end = datetime.combine(today, end_time, tzinfo=HOSTEL_TZ)
     if start >= end:
-        raise ApiError(
-            400,
-            "INVALID_AVAILABILITY",
-            "The start time must be before the end time.",
-            field="window_end",
-        )
+        raise fail("WINDOW_ORDER", "window_end")
     if start < local_now.replace(second=0, microsecond=0):
-        raise ApiError(
-            400,
-            "INVALID_AVAILABILITY",
-            "The time window cannot start in the past.",
-            field="window_start",
-        )
+        raise fail("WINDOW_PAST", "window_start")
     return {
         "availability_mode": availability_mode,
         "window_start": start.astimezone(timezone.utc),
@@ -140,12 +140,7 @@ def submit_request(
     now = now or utcnow()
     client_key = (client_key or "").strip() or None
     if client_key and len(client_key) > KEY_LIMIT:
-        raise ApiError(
-            400,
-            "INVALID_FIELD",
-            f"client_key can be at most {KEY_LIMIT} characters.",
-            field="client_key",
-        )
+        raise fail("KEY_TOO_LONG", "client_key", limit=KEY_LIMIT)
     if client_key:
         earlier = _earlier_submit(student, client_key)
         if earlier:
@@ -154,50 +149,30 @@ def submit_request(
     try:
         priority_value = Priority(priority or Priority.NORMAL.value)
     except ValueError:
-        raise ApiError(
-            400, "INVALID_PRIORITY", "Priority must be normal or urgent.", field="priority"
-        ) from None
+        raise fail("BAD_STUDENT_PRIORITY", "priority") from None
     if priority_value == Priority.EMERGENCY:
-        raise ApiError(
-            400,
-            "INVALID_PRIORITY",
-            "Only a supervisor can mark a request as an emergency.",
-            field="priority",
-        )
+        raise fail("EMERGENCY_FOR_STAFF", "priority")
     note = _clean_text(note, "note", "The note")
     urgent_reason = _clean_text(urgent_reason, "urgent_reason", "The urgent reason")
     if priority_value == Priority.URGENT and not urgent_reason:
-        raise ApiError(
-            400,
-            "URGENT_REASON_REQUIRED",
-            "Tell us why this request is urgent.",
-            field="urgent_reason",
-        )
+        raise fail("URGENT_REASON_REQUIRED", "urgent_reason")
     if priority_value == Priority.NORMAL:
         urgent_reason = None
     availability = availability_from(availability_mode, window_start, window_end, now)
 
     profile = student.student_profile
     if profile is None or profile.room is None:
-        raise ApiError(
-            409,
-            "PROFILE_INCOMPLETE",
-            "Your profile has no room yet. Please contact the hostel office.",
-        )
+        raise fail("PROFILE_INCOMPLETE")
     if not (student.phone or "").strip():
-        raise ApiError(
-            409,
-            "PHONE_REQUIRED",
-            "Your profile has no phone number. Please contact the hostel office.",
-        )
+        raise fail("PHONE_REQUIRED")
     if active_request(student):
-        raise ApiError(409, "ACTIVE_REQUEST_EXISTS", "You already have an active cleaning request.")
+        raise fail("ACTIVE_REQUEST_EXISTS")
 
     current = balance(student.id, now)
     is_normal = priority_value == Priority.NORMAL
     has_credit = (current["available"] if is_normal else current["standard_available"]) > 0
     if is_normal and not has_credit:
-        raise ApiError(409, "NO_CREDIT", "You have no cleaning credit available.")
+        raise fail("NO_CREDIT")
 
     request = CleaningRequest(
         student=student,
@@ -206,7 +181,7 @@ def submit_request(
         room=profile.room,
         room_snapshot=room_dict(profile.room),
         contact_phone=student.phone.strip(),
-        status=RequestStatus.SUBMITTED,
+        status=S.SUBMITTED,
         priority=priority_value,
         urgent_reason=urgent_reason,
         note=note,
@@ -263,16 +238,16 @@ def _after_clash(student: User, client_key: str | None) -> tuple[CleaningRequest
         earlier = _earlier_submit(student, client_key)
         if earlier:
             return earlier, False
-    raise ApiError(409, "ACTIVE_REQUEST_EXISTS", "You already have an active cleaning request.")
+    raise fail("ACTIVE_REQUEST_EXISTS")
 
 
 def cancel_by_student(request: CleaningRequest, student: User) -> CleaningRequest:
     if request.student_id != student.id:
-        raise ApiError(404, "REQUEST_NOT_FOUND", "This request does not exist.")
-    if request.status == RequestStatus.CANCELLED_BY_STUDENT:
+        raise fail("REQUEST_NOT_FOUND")
+    if request.status == S.CANCELLED_BY_STUDENT:
         return request
     if request.status not in STUDENT_CANCELLABLE:
-        raise ApiError(409, "CANNOT_CANCEL", "This request can no longer be cancelled.")
+        raise fail("CANNOT_CANCEL")
 
     old_state = request.status
     try:
@@ -280,7 +255,7 @@ def cancel_by_student(request: CleaningRequest, student: User) -> CleaningReques
             release_credit(student, request.id, "Request cancelled by the student", actor=student)
             request.credit_reservation = CreditReservation.RELEASED
         request.resolution_reason = "Cancelled by the student"
-        transition(request, RequestStatus.CANCELLED_BY_STUDENT, actor=student)
+        transition(request, S.CANCELLED_BY_STUDENT, actor=student)
         record_audit(
             "REQUEST_CANCELLED",
             "cleaning_request",
@@ -302,18 +277,114 @@ def cancel_by_student(request: CleaningRequest, student: User) -> CleaningReques
         raise
     except (IntegrityError, StaleDataError):
         db.session.rollback()
-        return _after_cancel_clash(request.id, student)
+        return _settled(request.id, lambda latest: latest.status == S.CANCELLED_BY_STUDENT)
     return request
 
 
-def _after_cancel_clash(request_id: int, student: User) -> CleaningRequest:
+def _settled(request_id: int, done) -> CleaningRequest:
     db.session.expire_all()
     latest = db.session.get(CleaningRequest, request_id)
-    if latest is not None and latest.status == RequestStatus.CANCELLED_BY_STUDENT:
+    if latest is not None and done(latest):
         return latest
-    raise ApiError(
-        409, "STALE_REQUEST", "This request was updated by someone else. Please refresh."
-    )
+    raise stale(request_id)
+
+
+def _approved(request: CleaningRequest) -> bool:
+    return any(event.event_type == "APPROVED" for event in request.events)
+
+
+def approve_request(request: CleaningRequest, supervisor: User) -> CleaningRequest:
+    if _approved(request):
+        return request
+    if request.status != S.SUBMITTED:
+        raise fail("CANNOT_APPROVE")
+    try:
+        transition(request, S.AWAITING_ASSIGNMENT, actor=supervisor, event_type="APPROVED")
+        record_audit(
+            "REQUEST_APPROVED",
+            "cleaning_request",
+            request.id,
+            actor=supervisor,
+            before={"status": S.SUBMITTED.value},
+            after={"status": request.status.value},
+        )
+        db.session.commit()
+    except StaleDataError:
+        db.session.rollback()
+        return _settled(request.id, _approved)
+    return request
+
+
+def _plain(value):
+    if isinstance(value, datetime):
+        return _iso(value)
+    return value.value if isinstance(value, Enum) else value
+
+
+def change_request(
+    request: CleaningRequest,
+    supervisor: User,
+    lock_version=None,
+    reason: str | None = None,
+    priority: str | None = None,
+    availability_mode: str | None = None,
+    window_start: str | None = None,
+    window_end: str | None = None,
+    now: datetime | None = None,
+) -> CleaningRequest:
+    now = now or utcnow()
+    reason = _clean_text(reason, "reason", "The reason")
+    if not reason:
+        raise fail("CHANGE_REASON", "reason")
+    if type(lock_version) is not int:
+        raise fail("BAD_LOCK_VERSION", "lock_version")
+    changes = {}
+    if priority is not None:
+        try:
+            changes["priority"] = Priority(priority)
+        except ValueError:
+            raise fail("BAD_PRIORITY", "priority") from None
+    if availability_mode is not None or window_start or window_end:
+        changes.update(availability_from(availability_mode, window_start, window_end, now))
+    if not changes:
+        raise fail("NO_CHANGE")
+    before = {key: _plain(getattr(request, key)) for key in changes}
+    after = {key: _plain(value) for key, value in changes.items()}
+    if before == after:
+        return request
+    if request.status not in SUPERVISOR_CHANGEABLE:
+        raise fail("CANNOT_CHANGE")
+    if lock_version != request.lock_version:
+        raise stale(request.id)
+    if (
+        changes.get("priority") == Priority.NORMAL
+        and request.credit_reservation != CreditReservation.RESERVED
+    ):
+        raise fail("NORMAL_NEEDS_CREDIT", "priority")
+    for key, value in changes.items():
+        setattr(request, key, value)
+    try:
+        record_event(
+            request,
+            "DETAILS_CHANGED",
+            supervisor,
+            request.status,
+            {"reason": reason, "before": before, "after": after},
+        )
+        record_audit(
+            "REQUEST_DETAILS_CHANGED",
+            "cleaning_request",
+            request.id,
+            actor=supervisor,
+            before=before,
+            after=after,
+            reason=reason,
+        )
+        db.session.commit()
+    except StaleDataError:
+        db.session.rollback()
+        raise stale(request.id) from None
+    return request
 
 
 def _notification_payload(request: CleaningRequest) -> dict:
@@ -325,7 +396,7 @@ def _notification_payload(request: CleaningRequest) -> dict:
 
 
 def can_view(request: CleaningRequest, viewer: User) -> bool:
-    if viewer.role in (Role.SUPERVISOR, Role.SUPER_ADMIN):
+    if viewer.role in SUPERVISOR_ROLES:
         return True
     if viewer.role == Role.STUDENT:
         return request.student_id == viewer.id
@@ -346,7 +417,7 @@ def get_request_for(request_id: int, viewer: User) -> CleaningRequest:
         )
         request = None
     if request is None:
-        raise ApiError(404, "REQUEST_NOT_FOUND", "This request does not exist.")
+        raise fail("REQUEST_NOT_FOUND")
     return request
 
 
@@ -382,27 +453,10 @@ def event_dict(event: RequestEvent) -> dict:
 
 def request_dict(request: CleaningRequest, viewer: User) -> dict:
     return {
-        "id": request.id,
-        "status": request.status.value,
-        "status_label": STATUS_LABELS[request.status],
-        "is_active": not is_terminal(request.status),
-        "priority": request.priority.value,
+        **request_summary(request),
         "urgent_reason": request.urgent_reason,
         "note": request.note,
-        "availability": {
-            "mode": request.availability_mode.value,
-            "window_start": _iso(request.window_start),
-            "window_end": _iso(request.window_end),
-            "available_until": _iso(request.available_until),
-        },
-        "room": request.room_snapshot,
         "contact_phone": request.contact_phone,
-        "credit_reservation": request.credit_reservation.value,
-        "student": _person(request.student),
-        "assigned_worker": _person(request.assigned_worker),
-        "created_at": _iso(request.created_at),
-        "closed_at": _iso(request.closed_at),
-        "resolution_reason": request.resolution_reason,
         "lock_version": request.lock_version,
         "actions": allowed_actions(request, viewer),
         "timeline": [event_dict(event) for event in request.events],
@@ -417,7 +471,7 @@ def _enum_list(value: str | None, enum_type, label: str) -> list:
         try:
             items.append(enum_type(part.strip().upper()))
         except ValueError:
-            raise ApiError(400, "INVALID_FILTER", f"Unknown {label}: {part.strip()}.") from None
+            raise fail("UNKNOWN_FILTER", label=label, value=part.strip()) from None
     return items
 
 
@@ -427,9 +481,9 @@ def _whole_number(value: str | None, label: str, default: int, low: int, high: i
     try:
         number = int(value)
     except ValueError:
-        raise ApiError(400, "INVALID_FILTER", f"{label} must be a whole number.") from None
+        raise fail("NOT_WHOLE", label=label) from None
     if not low <= number <= high:
-        raise ApiError(400, "INVALID_FILTER", f"{label} must be between {low} and {high}.")
+        raise fail("OUT_OF_RANGE", label=label, low=low, high=high)
     return number
 
 
@@ -488,11 +542,95 @@ def request_summary(request: CleaningRequest) -> dict:
         "is_active": not is_terminal(request.status),
         "priority": request.priority.value,
         "room": request.room_snapshot,
-        "availability_mode": request.availability_mode.value,
+        "availability": {
+            "mode": request.availability_mode.value,
+            "label": availability_label(request, utcnow()),
+            "window_start": _iso(request.window_start),
+            "window_end": _iso(request.window_end),
+            "available_until": _iso(request.available_until),
+        },
         "credit_reservation": request.credit_reservation.value,
         "student": _person(request.student),
         "assigned_worker": _person(request.assigned_worker),
+        "accepted_at": _iso(request.accepted_at),
+        "latest_eta_minutes": request.latest_eta_minutes,
         "created_at": _iso(request.created_at),
         "closed_at": _iso(request.closed_at),
         "resolution_reason": request.resolution_reason,
+    }
+
+
+def _clock(value: datetime) -> str:
+    local = hostel_now(as_utc(value))
+    return f"{local.hour % 12 or 12}:{local:%M} {'am' if local.hour < 12 else 'pm'}"
+
+
+def availability_label(request: CleaningRequest, now: datetime) -> str:
+    day = hostel_now(as_utc(request.available_until)).date()
+    today = day == hostel_now(now).date()
+    if request.availability_mode == AvailabilityMode.TIME_WINDOW:
+        window = f"{_clock(request.window_start)} to {_clock(request.window_end)}"
+        return f"{'Today' if today else f'{day.day} {day:%b}'}, {window}"
+    if request.availability_mode == AvailabilityMode.AVAILABLE_NOW:
+        return "Available now" if today else f"Available on {day.day} {day:%b}"
+    return "Any time today" if today else f"Any time on {day.day} {day:%b}"
+
+
+def _is_delayed(request: CleaningRequest, now: datetime) -> bool:
+    if request.status not in (S.ACCEPTED_QUEUED, S.EN_ROUTE):
+        return False
+    if request.accepted_at is None or request.original_eta_minutes is None:
+        return False
+    return as_utc(request.accepted_at) + timedelta(minutes=request.original_eta_minutes) <= now
+
+
+def board_group(request: CleaningRequest, now: datetime) -> str | None:
+    status = request.status
+    if status in SUPERVISOR_CHANGEABLE and request.priority != Priority.NORMAL:
+        return "urgent"
+    if _is_delayed(request, now):
+        return "delayed"
+    groups = {
+        "new": {S.SUBMITTED},
+        "awaiting_assignment": {
+            S.AWAITING_ASSIGNMENT,
+            S.AWAITING_REASSIGNMENT,
+            S.AWAITING_STUDENT_RESCHEDULE,
+        },
+        "offered": {S.OFFERED},
+        "disputed": {S.DISPUTED, S.SUPERVISOR_INTERVENTION},
+        "failed": FAILED_STATES,
+    }
+    for key, states in groups.items():
+        if status in states:
+            return key
+    return "active" if status in ACTIVE_STATES else None
+
+
+def operations_board(now: datetime | None = None) -> dict:
+    now = now or utcnow()
+    since = _today_at(now, time.min)
+    rows = db.session.scalars(
+        db.select(CleaningRequest).filter(
+            db.or_(
+                CleaningRequest.status.in_(ACTIVE_STATES),
+                db.and_(
+                    CleaningRequest.status.in_(FAILED_STATES),
+                    CleaningRequest.closed_at >= since,
+                ),
+            )
+        )
+    ).all()
+    rows = sorted(rows, key=lambda row: (PRIORITY_ORDER[row.priority], row.id))
+    grouped = {key: [] for key in BOARD_GROUPS}
+    for row in rows:
+        key = board_group(row, now)
+        if key:
+            grouped[key].append(request_summary(row))
+    return {
+        "generated_at": _iso(now),
+        "groups": [
+            {"key": key, "label": label, "requests": grouped[key]}
+            for key, label in BOARD_GROUPS.items()
+        ],
     }

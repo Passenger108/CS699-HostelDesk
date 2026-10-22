@@ -1,4 +1,4 @@
-from app.common.errors import ApiError
+from app.common.errors import fail
 from app.extensions import db
 from app.hostel_structure.models import Floor, Hostel, Location, LocationKind, Room, Wing
 
@@ -59,7 +59,7 @@ def seed_hostel_4() -> tuple[Hostel, bool]:
 def get_hostel(code: str = HOSTEL_4["code"]) -> Hostel:
     hostel = db.session.scalar(db.select(Hostel).filter_by(code=code))
     if hostel is None:
-        raise ApiError(404, "HOSTEL_NOT_FOUND", "The hostel structure has not been set up yet.")
+        raise fail("HOSTEL_NOT_FOUND")
     return hostel
 
 
