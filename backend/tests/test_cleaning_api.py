@@ -151,7 +151,7 @@ def test_staff_visibility(credited, post, get, make_user):
 
     seen = get(f"{URL}/{request_id}", login_id="sup").get_json()["request"]
     assert seen["student"]["id"] == credited.id
-    assert seen["actions"] == []
+    assert seen["actions"] == ["approve", "change"]
     assert get(f"{URL}/{request_id}", login_id="admin").status_code == 200
     assert get(f"{URL}/{request_id}", login_id="worker").status_code == 404
 

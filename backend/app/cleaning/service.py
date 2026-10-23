@@ -422,10 +422,16 @@ def get_request_for(request_id: int, viewer: User) -> CleaningRequest:
 
 
 def allowed_actions(request: CleaningRequest, viewer: User) -> list[str]:
-    actions = []
-    if viewer.id == request.student_id and request.status in STUDENT_CANCELLABLE:
-        actions.append("cancel")
-    return actions
+    if viewer.role in SUPERVISOR_ROLES:
+        checks = {
+            "approve": request.status == S.SUBMITTED,
+            "change": request.status in SUPERVISOR_CHANGEABLE,
+        }
+    else:
+        checks = {
+            "cancel": viewer.id == request.student_id and request.status in STUDENT_CANCELLABLE
+        }
+    return [action for action, allowed in checks.items() if allowed]
 
 
 def _iso(value: datetime | None) -> str | None:
