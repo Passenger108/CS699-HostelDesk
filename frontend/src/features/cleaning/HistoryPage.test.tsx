@@ -5,16 +5,12 @@ import type { RequestSummary } from "../../types/cleaning";
 import { studentMe, submittedRequest } from "./fixtures";
 
 const summary: RequestSummary = {
-  id: 7,
+  ...submittedRequest,
   status: "CANCELLED_BY_STUDENT",
   status_label: "Cancelled by you",
   is_active: false,
   priority: "URGENT",
-  room: { id: 5, number: "A105", floor: 1, floor_label: "Floor 1", wing: "A" },
-  availability_mode: "ANY_TIME_TODAY",
   credit_reservation: "RELEASED",
-  student: { id: 1, name: "Demo Student", role: "STUDENT" },
-  assigned_worker: null,
   created_at: "2026-10-19T04:30:00+00:00",
   closed_at: "2026-10-19T05:00:00+00:00",
   resolution_reason: "Cancelled by the student",

@@ -48,6 +48,7 @@ export const submittedRequest: CleaningRequest = {
   note: "Please clean the balcony",
   availability: {
     mode: "TIME_WINDOW",
+    label: "Today, 2:00 pm to 3:30 pm",
     window_start: "2026-10-17T08:30:00+00:00",
     window_end: "2026-10-17T10:00:00+00:00",
     available_until: "2026-10-17T10:00:00+00:00",
@@ -57,6 +58,8 @@ export const submittedRequest: CleaningRequest = {
   credit_reservation: "RESERVED",
   student: { id: 1, name: "Demo Student", role: "STUDENT" },
   assigned_worker: null,
+  accepted_at: null,
+  latest_eta_minutes: null,
   created_at: "2026-10-17T05:00:00+00:00",
   closed_at: null,
   resolution_reason: null,

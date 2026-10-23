@@ -35,7 +35,7 @@ describe("App shell", () => {
   it("signs in and shows the navigation for the user role", async () => {
     mockFetch(() => [
       200,
-      { access_token: "a", refresh_token: "r", user: supervisor },
+      { access_token: "a", refresh_token: "r", user: supervisor, groups: [] },
     ]);
     render(<App />);
 
@@ -92,7 +92,7 @@ describe("App shell", () => {
     mockFetch((url) =>
       url.endsWith("/auth/login")
         ? [200, { access_token: "a", refresh_token: "r", user: supervisor }]
-        : [200, { unread_count: 0 }],
+        : [200, { unread_count: 0, groups: [] }],
     );
     window.history.pushState({}, "", "/credits");
     render(<App />);
