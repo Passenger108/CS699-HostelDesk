@@ -2,10 +2,14 @@ from flask import Blueprint, jsonify, request
 
 from app.auth.guards import current_user, login_required, roles_required
 from app.cleaning.service import (
+    SUPERVISOR_ROLES,
     active_request,
+    approve_request,
     cancel_by_student,
+    change_request,
     get_request_for,
     list_requests,
+    operations_board,
     request_dict,
     submit_request,
 )
@@ -22,6 +26,7 @@ TEXT_FIELDS = (
     "note",
     "urgent_reason",
     "client_key",
+    "reason",
 )
 
 
@@ -93,3 +98,32 @@ def cancel_request(request_id: int):
     student = current_user()
     cleaning_request = cancel_by_student(get_request_for(request_id, student), student)
     return jsonify({"request": request_dict(cleaning_request, student)})
+
+
+@bp.post("/requests/<int:request_id>/approve")
+@roles_required(*SUPERVISOR_ROLES)
+def approve(request_id: int):
+    supervisor = current_user()
+    cleaning_request = approve_request(get_request_for(request_id, supervisor), supervisor)
+    return jsonify({"request": request_dict(cleaning_request, supervisor)})
+
+
+@bp.patch("/requests/<int:request_id>")
+@roles_required(*SUPERVISOR_ROLES)
+def change(request_id: int):
+    body = _json_body()
+    supervisor = current_user()
+    fields = ("reason", "priority", "availability_mode", "window_start", "window_end")
+    cleaning_request = change_request(
+        get_request_for(request_id, supervisor),
+        supervisor,
+        lock_version=body.get("lock_version"),
+        **{field: body.get(field) for field in fields},
+    )
+    return jsonify({"request": request_dict(cleaning_request, supervisor)})
+
+
+@bp.get("/board")
+@roles_required(*SUPERVISOR_ROLES)
+def board():
+    return jsonify(operations_board())

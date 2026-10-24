@@ -1,7 +1,7 @@
 from typing import Any
 
 from app.cleaning.models import CleaningRequest, RequestEvent, RequestStatus
-from app.common.errors import ApiError
+from app.common.errors import ApiError, fail
 from app.common.models import utcnow
 from app.extensions import db
 
@@ -123,6 +123,8 @@ STUDENT_CANCELLABLE = frozenset(
     }
 )
 
+SUPERVISOR_CHANGEABLE = frozenset({S.SUBMITTED, S.AWAITING_ASSIGNMENT, S.AWAITING_REASSIGNMENT})
+
 STATUS_LABELS: dict[RequestStatus, str] = {
     S.SUBMITTED: "Waiting for supervisor approval",
     S.AWAITING_ASSIGNMENT: "Approved, finding a worker",
@@ -148,7 +150,17 @@ STATUS_LABELS: dict[RequestStatus, str] = {
 EVENT_LABELS: dict[str, str] = {
     "SUBMITTED": "Request submitted",
     "CANCELLED_BY_STUDENT": "Cancelled by the student",
+    "APPROVED": "Approved by the supervisor",
+    "DETAILS_CHANGED": "Priority or time changed by the supervisor",
 }
+
+
+def stale(request_id: int) -> ApiError:
+    latest = db.session.scalar(
+        db.select(RequestEvent).filter_by(request_id=request_id).order_by(RequestEvent.id.desc())
+    )
+    who = latest.actor.name if latest and latest.actor else "someone else"
+    return fail("STALE_REQUEST", who=who)
 
 
 def is_terminal(state: RequestStatus) -> bool:
@@ -187,16 +199,10 @@ def transition(
     expected_version: int | None = None,
 ) -> RequestEvent:
     if expected_version is not None and expected_version != request.lock_version:
-        raise ApiError(
-            409, "STALE_REQUEST", "This request was updated by someone else. Please refresh."
-        )
+        raise stale(request.id)
     old_state = request.status
     if not can_transition(old_state, new_state):
-        raise ApiError(
-            409,
-            "ILLEGAL_TRANSITION",
-            f"This request cannot move from {old_state.value} to {new_state.value}.",
-        )
+        raise fail("ILLEGAL_TRANSITION", old=old_state.value, new=new_state.value)
     request.status = new_state
     if is_terminal(new_state):
         request.active_student_id = None

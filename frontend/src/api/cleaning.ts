@@ -1,7 +1,9 @@
 import type {
+  Board,
   CleaningRequest,
   NewCleaningRequest,
   RequestFilters,
+  RequestChange,
   RequestPage,
 } from "../types/cleaning";
 import { apiFetch } from "./client";
@@ -41,3 +43,16 @@ export const fetchRequests = (filters: RequestFilters = {}) =>
 
 export const fetchRequest = (id: number) =>
   apiFetch<RequestResponse>(`/cleaning/requests/${id}`);
+
+export const approveRequest = (id: number) =>
+  apiFetch<RequestResponse>(`/cleaning/requests/${id}/approve`, {
+    method: "POST",
+  });
+
+export const changeRequest = (id: number, body: RequestChange) =>
+  apiFetch<RequestResponse>(`/cleaning/requests/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+
+export const fetchBoard = () => apiFetch<Board>("/cleaning/board");

@@ -44,28 +44,34 @@ export interface RequestEvent {
   occurred_at: string;
 }
 
-export interface CleaningRequest {
+export interface RequestSummary {
   id: number;
   status: RequestStatus;
   status_label: string;
   is_active: boolean;
   priority: Priority;
-  urgent_reason: string | null;
-  note: string | null;
+  room: RoomInfo;
   availability: {
     mode: AvailabilityMode;
+    label: string;
     window_start: string | null;
     window_end: string | null;
     available_until: string;
   };
-  room: RoomInfo;
-  contact_phone: string;
   credit_reservation: "NONE" | "RESERVED" | "CONSUMED" | "RELEASED";
   student: Person;
   assigned_worker: Person | null;
+  accepted_at: string | null;
+  latest_eta_minutes: number | null;
   created_at: string;
   closed_at: string | null;
   resolution_reason: string | null;
+}
+
+export interface CleaningRequest extends RequestSummary {
+  urgent_reason: string | null;
+  note: string | null;
+  contact_phone: string;
   lock_version: number;
   actions: string[];
   timeline: RequestEvent[];
@@ -81,20 +87,18 @@ export interface NewCleaningRequest {
   client_key: string;
 }
 
-export interface RequestSummary {
-  id: number;
-  status: RequestStatus;
-  status_label: string;
-  is_active: boolean;
-  priority: Priority;
-  room: RoomInfo;
-  availability_mode: AvailabilityMode;
-  credit_reservation: CleaningRequest["credit_reservation"];
-  student: Person;
-  assigned_worker: Person | null;
-  created_at: string;
-  closed_at: string | null;
-  resolution_reason: string | null;
+export interface RequestChange {
+  lock_version: number;
+  reason: string;
+  priority?: Priority;
+  availability_mode?: AvailabilityMode;
+  window_start?: string;
+  window_end?: string;
+}
+
+export interface Board {
+  generated_at: string;
+  groups: { key: string; label: string; requests: RequestSummary[] }[];
 }
 
 export interface RequestPage {
