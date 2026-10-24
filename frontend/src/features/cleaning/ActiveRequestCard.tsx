@@ -5,7 +5,8 @@ import { cancelCleaningRequest, fetchActiveRequest } from "../../api/cleaning";
 import { ApiError } from "../../api/client";
 import { ErrorMessage } from "../../components/ErrorMessage";
 import type { CleaningRequest } from "../../types/cleaning";
-import { PRIORITY_LABELS, availabilityText } from "./labels";
+import { SupervisorActions } from "../operations/SupervisorActions";
+import { PRIORITY_LABELS } from "./labels";
 import { RequestTimeline } from "./RequestTimeline";
 import { StatusChip } from "./StatusChip";
 
@@ -92,7 +93,7 @@ export function RequestDetails({ request }: { request: CleaningRequest }) {
         </div>
         <div className="field">
           <dt>When</dt>
-          <dd>{availabilityText(request)}</dd>
+          <dd>{request.availability.label}</dd>
         </div>
         <div className="field">
           <dt>Credit</dt>
@@ -103,12 +104,19 @@ export function RequestDetails({ request }: { request: CleaningRequest }) {
           </dd>
         </div>
       </dl>
+      {request.urgent_reason && (
+        <p className="request-card__note">Urgent: {request.urgent_reason}</p>
+      )}
       {request.note && <p className="request-card__note">“{request.note}”</p>}
       <h3>Timeline</h3>
       <RequestTimeline events={request.timeline} />
       {request.actions.includes("cancel") && (
         <CancelControl request={request} />
       )}
+      <SupervisorActions
+        key={`${request.id}-${request.lock_version}`}
+        request={request}
+      />
     </>
   );
 }

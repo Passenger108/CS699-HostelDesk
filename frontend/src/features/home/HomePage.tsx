@@ -1,7 +1,8 @@
-import { SectionPage } from '../../pages/SectionPage';
-import { useAuth } from '../auth/AuthContext';
-import { ActiveRequestCard } from '../cleaning/ActiveRequestCard';
-import { CreditsCard } from '../credits/CreditsCard';
+import { SectionPage } from "../../pages/SectionPage";
+import { useAuth } from "../auth/AuthContext";
+import { ActiveRequestCard } from "../cleaning/ActiveRequestCard";
+import { CreditsCard } from "../credits/CreditsCard";
+import { OperationsPage } from "../operations/OperationsPage";
 
 function StudentHome() {
   return (
@@ -15,6 +16,8 @@ function StudentHome() {
 
 export function HomePage() {
   const { user } = useAuth();
-  if (user?.role === 'STUDENT') return <StudentHome />;
+  if (user?.role === "STUDENT") return <StudentHome />;
+  if (user?.role === "SUPERVISOR" || user?.role === "SUPER_ADMIN")
+    return <OperationsPage />;
   return <SectionPage />;
 }
