@@ -1,6 +1,8 @@
 from flask import Flask, jsonify
 from werkzeug.exceptions import HTTPException
 
+TEXT_LIMIT = 500
+
 
 class ApiError(Exception):
     def __init__(self, status: int, code: str, message: str, field: str | None = None):
@@ -66,12 +68,29 @@ ERRORS = {
     ),
     "ILLEGAL_TRANSITION": (409, "This request cannot move from {old} to {new}."),
     "STALE_REQUEST": (409, "This request was updated by {who}. Please refresh."),
+    "BAD_LOCATION": (400, "Choose a floor and wing from the list.", "INVALID_LOCATION"),
+    "LOCATION_REASON": (400, "Give a reason for correcting the location.", "REASON_REQUIRED"),
+    "WORKER_NOT_FOUND": (404, "This worker does not exist."),
+    "WORKER_OFF_DUTY": (409, "This worker is off duty and cannot get offers."),
+    "CANNOT_OFFER": (409, "Only an approved request that is waiting for a worker can be offered."),
 }
 
 
 def fail(key: str, field: str | None = None, /, **values) -> ApiError:
     status, message, *code = ERRORS[key]
     return ApiError(status, code[0] if code else key, message.format(**values), field)
+
+
+def clean_text(value: str | None, field: str, label: str) -> str | None:
+    value = (value or "").strip()
+    if len(value) > TEXT_LIMIT:
+        raise ApiError(
+            400,
+            f"{field.upper()}_TOO_LONG",
+            f"{label} can be at most {TEXT_LIMIT} characters.",
+            field=field,
+        )
+    return value or None
 
 
 def error_response(status: int, code: str, message: str, field: str | None = None):

@@ -20,6 +20,10 @@ TEMPLATES = {
         "New urgent request",
         "Room {room} asked for urgent cleaning: {reason}",
     ),
+    "OFFER_RECEIVED": (
+        "New cleaning offer",
+        "Room {room} needs cleaning. Please accept or decline within {minutes} minutes.",
+    ),
     "REQUEST_CANCELLED_BY_STUDENT": (
         "Request cancelled",
         "The student in room {room} cancelled their cleaning request.",

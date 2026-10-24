@@ -124,6 +124,7 @@ STUDENT_CANCELLABLE = frozenset(
 )
 
 SUPERVISOR_CHANGEABLE = frozenset({S.SUBMITTED, S.AWAITING_ASSIGNMENT, S.AWAITING_REASSIGNMENT})
+OFFERABLE = frozenset({S.AWAITING_ASSIGNMENT, S.AWAITING_REASSIGNMENT})
 
 STATUS_LABELS: dict[RequestStatus, str] = {
     S.SUBMITTED: "Waiting for supervisor approval",
@@ -152,6 +153,7 @@ EVENT_LABELS: dict[str, str] = {
     "CANCELLED_BY_STUDENT": "Cancelled by the student",
     "APPROVED": "Approved by the supervisor",
     "DETAILS_CHANGED": "Priority or time changed by the supervisor",
+    "OFFERED": "Offered to a worker",
 }
 
 

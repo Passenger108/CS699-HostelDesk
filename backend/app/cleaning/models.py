@@ -52,6 +52,14 @@ class CreditReservation(str, enum.Enum):
     RELEASED = "RELEASED"
 
 
+class OfferStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    ACCEPTED = "ACCEPTED"
+    DECLINED = "DECLINED"
+    TIMED_OUT = "TIMED_OUT"
+    WITHDRAWN = "WITHDRAWN"
+
+
 class CleaningRequest(IdMixin, TimestampMixin, db.Model):
     __tablename__ = "cleaning_requests"
     __table_args__ = (
@@ -96,6 +104,9 @@ class CleaningRequest(IdMixin, TimestampMixin, db.Model):
     events: Mapped[list["RequestEvent"]] = relationship(
         back_populates="request", order_by="RequestEvent.id"
     )
+    offers: Mapped[list["AssignmentOffer"]] = relationship(
+        back_populates="request", order_by="AssignmentOffer.id"
+    )
 
     __mapper_args__ = {"version_id_col": lock_version}
 
@@ -121,6 +132,26 @@ class RequestEvent(IdMixin, db.Model):
 
     request: Mapped[CleaningRequest] = relationship(back_populates="events")
     actor: Mapped[User | None] = relationship()
+
+
+class AssignmentOffer(IdMixin, TimestampMixin, db.Model):
+    __tablename__ = "assignment_offers"
+
+    request_id: Mapped[int] = mapped_column(
+        ForeignKey("cleaning_requests.id"), nullable=False, index=True
+    )
+    worker_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    offered_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    status: Mapped[OfferStatus] = mapped_column(
+        Enum(OfferStatus, name="offer_status"), nullable=False
+    )
+    response_deadline: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    explanation: Mapped[str] = mapped_column(String(300), nullable=False)
+    decline_reason: Mapped[str | None] = mapped_column(String(500))
+
+    request: Mapped[CleaningRequest] = relationship(back_populates="offers")
+    worker: Mapped[User] = relationship(foreign_keys=[worker_id])
+    offered_by: Mapped[User] = relationship(foreign_keys=[offered_by_id])
 
 
 @event.listens_for(RequestEvent, "before_update")
