@@ -221,7 +221,7 @@ def test_supervisor_api_flow(submitted, boss, auth_get, client, login):
     )
     assert res.get_json()["request"]["priority"] == "URGENT"
     res = client.post(f"{URL}/{submitted.id}/approve", headers=headers)
-    assert res.get_json()["request"]["actions"] == ["change"]
+    assert res.get_json()["request"]["actions"] == ["change", "offer"]
 
     board = client.get("/api/v1/cleaning/board", headers=headers).get_json()
     assert board["groups"][0]["requests"][0]["id"] == submitted.id
@@ -267,6 +267,7 @@ def test_seed_demo_requests_is_repeatable(app):
     again = runner.invoke(args=["seed-demo-requests"]).output
     assert (first.count("created "), again.count("exists ")) == (4, 4)
     assert first.count("AWAITING_ASSIGNMENT") == 1
+    assert (first.count("placed "), first.count("offered "), again.count("offered ")) == (2, 1, 0)
 
 
 @pytest.mark.parametrize(

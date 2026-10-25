@@ -488,6 +488,7 @@ def allowed_actions(request: CleaningRequest, viewer: User) -> list[str]:
         checks = {
             "approve": request.status == S.SUBMITTED,
             "change": request.status in SUPERVISOR_CHANGEABLE,
+            "offer": request.status in OFFERABLE,
         }
     else:
         checks = {
