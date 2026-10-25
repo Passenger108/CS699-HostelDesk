@@ -4,6 +4,7 @@ import { approveRequest, changeRequest } from "../../api/cleaning";
 import { ErrorMessage } from "../../components/ErrorMessage";
 import type { CleaningRequest, Priority } from "../../types/cleaning";
 import { PRIORITY_LABELS } from "../cleaning/labels";
+import { AssignPanel } from "./AssignPanel";
 
 export function SupervisorActions({ request }: { request: CleaningRequest }) {
   const queryClient = useQueryClient();
@@ -48,6 +49,7 @@ export function SupervisorActions({ request }: { request: CleaningRequest }) {
       {approve.isError && (
         <ErrorMessage error={approve.error} fallback="Could not approve." />
       )}
+      {request.actions.includes("offer") && <AssignPanel request={request} />}
       {request.actions.includes("change") && (
         <form
           className="stack"

@@ -1,20 +1,20 @@
-import { useQuery } from '@tanstack/react-query';
-import { fetchMyProfile } from '../../api/profile';
-import { ErrorMessage } from '../../components/ErrorMessage';
-import type { StudentProfile, WorkerProfile } from '../../types/profile';
-import type { User } from '../../types/user';
+import { useQuery } from "@tanstack/react-query";
+import { fetchMyProfile } from "../../api/profile";
+import { ErrorMessage } from "../../components/ErrorMessage";
+import type { StudentProfile, WorkerProfile } from "../../types/profile";
+import type { User } from "../../types/user";
 
-const AVAILABILITY_LABELS: Record<WorkerProfile['availability'], string> = {
-  AVAILABLE: 'Available',
-  BUSY: 'Busy',
-  OFF_DUTY: 'Off duty',
-};
-
-function Field({ label, value }: { label: string; value: string | null | undefined }) {
+function Field({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | null | undefined;
+}) {
   return (
     <div className="field">
       <dt>{label}</dt>
-      <dd>{value || '—'}</dd>
+      <dd>{value || "—"}</dd>
     </div>
   );
 }
@@ -31,21 +31,27 @@ function StudentDetails({ profile }: { profile: StudentProfile }) {
           <Field label="Roll number" value={profile.roll_number} />
         </dl>
       ) : (
-        <p className="muted">No room is assigned yet. Contact the hostel office.</p>
+        <p className="muted">
+          No room is assigned yet. Contact the hostel office.
+        </p>
       )}
     </section>
   );
 }
 
-function WorkerDetails({ profile }: { profile: WorkerProfile }) {
+export function WorkerDetails({ profile }: { profile: WorkerProfile }) {
   return (
     <section className="card">
       <h2>Work</h2>
       <dl className="field-grid">
         <Field label="Employee ID" value={profile.employee_id} />
         <Field label="Shift" value={profile.shift} />
-        <Field label="Availability" value={AVAILABILITY_LABELS[profile.availability]} />
-        <Field label="Last location" value={profile.last_location?.label ?? 'Not set yet'} />
+        <Field label="Availability" value={profile.availability_label} />
+        <Field
+          label="Last location"
+          value={profile.last_location?.label ?? "Not set yet"}
+        />
+        <Field label="Location updated" value={profile.location_note} />
       </dl>
     </section>
   );
@@ -67,19 +73,26 @@ function AccountDetails({ user }: { user: User }) {
 
 export function ProfilePage() {
   const { data, isPending, isError, error } = useQuery({
-    queryKey: ['me', 'profile'],
+    queryKey: ["me", "profile"],
     queryFn: fetchMyProfile,
   });
 
   if (isPending) return <p className="page-loading">Loading…</p>;
-  if (isError) return <ErrorMessage error={error} fallback="Could not load your profile." />;
+  if (isError)
+    return (
+      <ErrorMessage error={error} fallback="Could not load your profile." />
+    );
 
   const { user, profile } = data;
   return (
     <div className="stack">
       <h1>Profile</h1>
-      {user.role === 'STUDENT' && profile && <StudentDetails profile={profile as StudentProfile} />}
-      {user.role === 'WORKER' && profile && <WorkerDetails profile={profile as WorkerProfile} />}
+      {user.role === "STUDENT" && profile && (
+        <StudentDetails profile={profile as StudentProfile} />
+      )}
+      {user.role === "WORKER" && profile && (
+        <WorkerDetails profile={profile as WorkerProfile} />
+      )}
       <AccountDetails user={user} />
     </div>
   );
