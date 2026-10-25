@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, request
 
 from app.auth.guards import current_user, login_required, roles_required
+from app.cleaning.recommendations import recommend
 from app.cleaning.service import (
     SUPERVISOR_ROLES,
     active_request,
@@ -9,6 +10,7 @@ from app.cleaning.service import (
     change_request,
     get_request_for,
     list_requests,
+    offer_request,
     operations_board,
     request_dict,
     submit_request,
@@ -30,7 +32,7 @@ TEXT_FIELDS = (
 )
 
 
-def _json_body() -> dict:
+def json_body() -> dict:
     body = request.get_json(silent=True)
     if not isinstance(body, dict):
         raise ApiError(400, "INVALID_BODY", "Send the request details as a JSON object.")
@@ -44,7 +46,7 @@ def _json_body() -> dict:
 @bp.post("/requests")
 @roles_required(Role.STUDENT)
 def create_request():
-    body = _json_body()
+    body = json_body()
     student = current_user()
     cleaning_request, created = submit_request(
         student,
@@ -111,7 +113,7 @@ def approve(request_id: int):
 @bp.patch("/requests/<int:request_id>")
 @roles_required(*SUPERVISOR_ROLES)
 def change(request_id: int):
-    body = _json_body()
+    body = json_body()
     supervisor = current_user()
     fields = ("reason", "priority", "availability_mode", "window_start", "window_end")
     cleaning_request = change_request(
@@ -121,6 +123,26 @@ def change(request_id: int):
         **{field: body.get(field) for field in fields},
     )
     return jsonify({"request": request_dict(cleaning_request, supervisor)})
+
+
+@bp.get("/requests/<int:request_id>/recommendations")
+@roles_required(*SUPERVISOR_ROLES)
+def recommendations(request_id: int):
+    return jsonify({"recommendations": recommend(get_request_for(request_id, current_user()))})
+
+
+@bp.post("/requests/<int:request_id>/offers")
+@roles_required(*SUPERVISOR_ROLES)
+def offer(request_id: int):
+    body = json_body()
+    supervisor = current_user()
+    cleaning_request = offer_request(
+        get_request_for(request_id, supervisor),
+        supervisor,
+        body.get("worker_id"),
+        body.get("lock_version"),
+    )
+    return jsonify({"request": request_dict(cleaning_request, supervisor)}), 201
 
 
 @bp.get("/board")
