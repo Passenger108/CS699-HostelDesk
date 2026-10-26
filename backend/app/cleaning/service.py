@@ -5,16 +5,20 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
 
 from app.cleaning.models import (
+    AssignmentOffer,
     AvailabilityMode,
     CleaningRequest,
     CreditReservation,
+    OfferStatus,
     Priority,
     RequestEvent,
     RequestStatus,
 )
+from app.cleaning.recommendations import recommend
 from app.cleaning.workflow import (
     ACTIVE_STATES,
     EVENT_LABELS,
+    OFFERABLE,
     STATUS_LABELS,
     STUDENT_CANCELLABLE,
     SUPERVISOR_CHANGEABLE,
@@ -24,7 +28,7 @@ from app.cleaning.workflow import (
     transition,
 )
 from app.common.audit import record_audit, record_security_event
-from app.common.errors import ApiError, fail
+from app.common.errors import ApiError, clean_text, fail
 from app.common.models import as_utc, utcnow
 from app.common.time import HOSTEL_TZ, hostel_now
 from app.credits.service import balance, release_credit, reserve_credit
@@ -32,12 +36,13 @@ from app.extensions import db
 from app.hostel_structure.models import Floor, Room, Wing
 from app.hostel_structure.service import room_dict
 from app.notifications.service import notify, notify_supervisors
-from app.users.models import Role, User
+from app.users.models import Role, User, WorkerAvailability
+from app.workers.service import get_worker
 
-TEXT_LIMIT = 500
 KEY_LIMIT = 64
 DEFAULT_PAGE_SIZE = 20
 MAX_PAGE_SIZE = 100
+OFFER_MINUTES = 5
 S = RequestStatus
 SUPERVISOR_ROLES = (Role.SUPERVISOR, Role.SUPER_ADMIN)
 PRIORITY_ORDER = {Priority.EMERGENCY: 0, Priority.URGENT: 1, Priority.NORMAL: 2}
@@ -54,20 +59,6 @@ BOARD_GROUPS = {
     "disputed": "Disputed or needs a decision",
     "failed": "Failed or unavailable today",
 }
-
-
-def _clean_text(value: str | None, field: str, label: str) -> str | None:
-    if value is None:
-        return None
-    value = value.strip()
-    if len(value) > TEXT_LIMIT:
-        raise ApiError(
-            400,
-            f"{field.upper()}_TOO_LONG",
-            f"{label} can be at most {TEXT_LIMIT} characters.",
-            field=field,
-        )
-    return value or None
 
 
 def _parse_time(value: str | None, label: str, field: str) -> time:
@@ -152,8 +143,8 @@ def submit_request(
         raise fail("BAD_STUDENT_PRIORITY", "priority") from None
     if priority_value == Priority.EMERGENCY:
         raise fail("EMERGENCY_FOR_STAFF", "priority")
-    note = _clean_text(note, "note", "The note")
-    urgent_reason = _clean_text(urgent_reason, "urgent_reason", "The urgent reason")
+    note = clean_text(note, "note", "The note")
+    urgent_reason = clean_text(urgent_reason, "urgent_reason", "The urgent reason")
     if priority_value == Priority.URGENT and not urgent_reason:
         raise fail("URGENT_REASON_REQUIRED", "urgent_reason")
     if priority_value == Priority.NORMAL:
@@ -255,6 +246,7 @@ def cancel_by_student(request: CleaningRequest, student: User) -> CleaningReques
             release_credit(student, request.id, "Request cancelled by the student", actor=student)
             request.credit_reservation = CreditReservation.RELEASED
         request.resolution_reason = "Cancelled by the student"
+        _withdraw_offers(request)
         transition(request, S.CANCELLED_BY_STUDENT, actor=student)
         record_audit(
             "REQUEST_CANCELLED",
@@ -333,7 +325,7 @@ def change_request(
     now: datetime | None = None,
 ) -> CleaningRequest:
     now = now or utcnow()
-    reason = _clean_text(reason, "reason", "The reason")
+    reason = clean_text(reason, "reason", "The reason")
     if not reason:
         raise fail("CHANGE_REASON", "reason")
     if type(lock_version) is not int:
@@ -387,6 +379,76 @@ def change_request(
     return request
 
 
+def _withdraw_offers(request: CleaningRequest) -> None:
+    for offer in request.offers:
+        if offer.status == OfferStatus.PENDING:
+            offer.status = OfferStatus.WITHDRAWN
+
+
+def _offered_to(worker_id: int):
+    return lambda request: request.status == S.OFFERED and request.assigned_worker_id == worker_id
+
+
+def offer_request(
+    request: CleaningRequest, supervisor: User, worker_id, lock_version, now: datetime | None = None
+) -> CleaningRequest:
+    now = now or utcnow()
+    if type(lock_version) is not int:
+        raise fail("BAD_LOCK_VERSION", "lock_version")
+    worker = get_worker(worker_id)
+    if _offered_to(worker.id)(request):
+        return request
+    if request.status not in OFFERABLE:
+        raise fail("CANNOT_OFFER")
+    if lock_version != request.lock_version:
+        raise stale(request.id)
+    if worker.worker_profile.availability == WorkerAvailability.OFF_DUTY:
+        raise fail("WORKER_OFF_DUTY", "worker_id")
+    pick = next((p for p in recommend(request, now) if p["worker"]["id"] == worker.id), None)
+    explanation = pick["reason"] if pick else "Chosen by the supervisor from the full list."
+    try:
+        request.assigned_worker = worker
+        request.offered_at = now
+        offer = AssignmentOffer(
+            request=request,
+            worker=worker,
+            offered_by=supervisor,
+            status=OfferStatus.PENDING,
+            response_deadline=now + timedelta(minutes=OFFER_MINUTES),
+            explanation=explanation,
+        )
+        db.session.add(offer)
+        transition(request, S.OFFERED, actor=supervisor, payload={"worker_id": worker.id})
+        record_audit(
+            "OFFER_CREATED",
+            "cleaning_request",
+            request.id,
+            actor=supervisor,
+            after={"worker_id": worker.id, "explanation": explanation},
+        )
+        payload = {**_notification_payload(request), "minutes": OFFER_MINUTES}
+        notify(worker, "OFFER_RECEIVED", payload)
+        db.session.commit()
+    except StaleDataError:
+        db.session.rollback()
+        return _settled(request.id, _offered_to(worker.id))
+    return request
+
+
+def offer_dict(offer: AssignmentOffer | None) -> dict | None:
+    if offer is None:
+        return None
+    return {
+        "id": offer.id,
+        "worker": _person(offer.worker),
+        "status": offer.status.value,
+        "response_deadline": _iso(offer.response_deadline),
+        "explanation": offer.explanation,
+        "summary": f"Offered to {offer.worker.name} until {_clock(offer.response_deadline)}. "
+        f"{offer.explanation}",
+    }
+
+
 def _notification_payload(request: CleaningRequest) -> dict:
     return {
         "request_id": request.id,
@@ -426,6 +488,7 @@ def allowed_actions(request: CleaningRequest, viewer: User) -> list[str]:
         checks = {
             "approve": request.status == S.SUBMITTED,
             "change": request.status in SUPERVISOR_CHANGEABLE,
+            "offer": request.status in OFFERABLE,
         }
     else:
         checks = {
@@ -465,6 +528,7 @@ def request_dict(request: CleaningRequest, viewer: User) -> dict:
         "contact_phone": request.contact_phone,
         "lock_version": request.lock_version,
         "actions": allowed_actions(request, viewer),
+        "offer": offer_dict(request.offers[-1] if request.offers else None),
         "timeline": [event_dict(event) for event in request.events],
     }
 

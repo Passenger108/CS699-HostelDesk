@@ -67,6 +67,15 @@ def find_room(number: str) -> Room | None:
     return db.session.scalar(db.select(Room).filter_by(number=number))
 
 
+def find_location(floor_number: int, wing_code: str) -> Location | None:
+    return db.session.scalar(
+        db.select(Location)
+        .join(Floor, Location.floor_id == Floor.id)
+        .join(Wing, Location.wing_id == Wing.id)
+        .filter(Floor.number == floor_number, Wing.code == wing_code)
+    )
+
+
 def room_dict(room: Room | None) -> dict | None:
     if room is None:
         return None

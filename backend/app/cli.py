@@ -4,13 +4,15 @@ import click
 from flask import Flask
 
 from app.auth.passwords import hash_password
-from app.cleaning.service import approve_request, submit_request
+from app.cleaning.models import CleaningRequest, RequestStatus
+from app.cleaning.service import approve_request, offer_request, submit_request
 from app.common.errors import ApiError
 from app.common.time import HOSTEL_TZ, hostel_now
 from app.credits.service import grant_weekly_credits
 from app.extensions import db
-from app.hostel_structure.service import HOSTEL_4, find_room, seed_hostel_4
+from app.hostel_structure.service import HOSTEL_4, find_location, find_room, seed_hostel_4
 from app.users.models import Role, StudentProfile, User, WorkerProfile
+from app.workers.service import update_location
 
 DEMO_PASSWORD = "hosteldesk-demo-2026"
 DEMO_USERS = [
@@ -45,6 +47,7 @@ DEMO_REQUESTS = [
     ("demo.student5", "ANY_TIME_TODAY", "NORMAL", None, True),
     ("demo.student6", "AVAILABLE_NOW", "NORMAL", None, False),
 ]
+DEMO_LOCATIONS = {"demo.worker": (5, "E"), "demo.worker2": (4, "D")}
 
 
 def _demo_phone(login_id: str) -> str:
@@ -121,6 +124,18 @@ def register_cli(app: Flask) -> None:
                 continue
             status = "created " if created else "exists  "
             click.echo(f"{status} request {request.id} for {login_id}: {request.status.value}")
+        for login_id, (floor, wing) in DEMO_LOCATIONS.items():
+            worker = db.session.scalar(db.select(User).filter_by(login_id=login_id))
+            location = find_location(floor, wing)
+            update_location(worker, location.id)
+            click.echo(f"placed   {login_id} at {location.label}")
+        waiting = db.session.scalar(
+            db.select(CleaningRequest).filter_by(status=RequestStatus.AWAITING_ASSIGNMENT)
+        )
+        if waiting:
+            worker = db.session.scalar(db.select(User).filter_by(login_id="demo.worker"))
+            offer_request(waiting, supervisor, worker.id, waiting.lock_version)
+            click.echo(f"offered  request {waiting.id} to demo.worker")
 
     @app.cli.command("grant-weekly-credits")
     @click.option(

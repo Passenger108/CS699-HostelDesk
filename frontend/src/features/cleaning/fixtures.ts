@@ -65,6 +65,7 @@ export const submittedRequest: CleaningRequest = {
   resolution_reason: null,
   lock_version: 1,
   actions: ["cancel"],
+  offer: null,
   timeline: [
     {
       id: 1,
