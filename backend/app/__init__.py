@@ -30,9 +30,11 @@ def create_app(config_name: str | None = None) -> Flask:
     register_error_handlers(app)
     _register_blueprints(app)
 
+    from app.cleaning.timers import start_timers
     from app.cli import register_cli
 
     register_cli(app)
+    app.before_request(lambda: start_timers(app))
     return app
 
 

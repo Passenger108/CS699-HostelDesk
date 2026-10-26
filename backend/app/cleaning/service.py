@@ -37,12 +37,13 @@ from app.hostel_structure.models import Floor, Room, Wing
 from app.hostel_structure.service import room_dict
 from app.notifications.service import notify, notify_supervisors
 from app.users.models import Role, User, WorkerAvailability
-from app.workers.service import get_worker
+from app.workers.service import get_worker, worker_tasks
 
 KEY_LIMIT = 64
 DEFAULT_PAGE_SIZE = 20
 MAX_PAGE_SIZE = 100
 OFFER_MINUTES = 5
+ETA_STEP, ETA_MAX = 5, 120
 S = RequestStatus
 SUPERVISOR_ROLES = (Role.SUPERVISOR, Role.SUPER_ADMIN)
 PRIORITY_ORDER = {Priority.EMERGENCY: 0, Priority.URGENT: 1, Priority.NORMAL: 2}
@@ -248,6 +249,7 @@ def cancel_by_student(request: CleaningRequest, student: User) -> CleaningReques
         request.resolution_reason = "Cancelled by the student"
         _withdraw_offers(request)
         transition(request, S.CANCELLED_BY_STUDENT, actor=student)
+        _free_worker(request.assigned_worker)
         record_audit(
             "REQUEST_CANCELLED",
             "cleaning_request",
@@ -433,6 +435,114 @@ def offer_request(
         db.session.rollback()
         return _settled(request.id, _offered_to(worker.id))
     return request
+
+
+def _free_worker(worker: User | None) -> None:
+    profile = worker.worker_profile if worker else None
+    if profile and profile.availability == WorkerAvailability.BUSY and not worker_tasks(worker.id):
+        profile.availability = WorkerAvailability.AVAILABLE
+
+
+def get_offer_for(offer_id: int, worker: User) -> AssignmentOffer:
+    offer = db.session.get(AssignmentOffer, offer_id)
+    if offer is None or offer.worker_id != worker.id:
+        raise fail("OFFER_NOT_FOUND")
+    return offer
+
+
+def worker_offers(worker: User) -> list[dict]:
+    offers = db.session.scalars(
+        db.select(AssignmentOffer)
+        .filter_by(worker_id=worker.id, status=OfferStatus.PENDING)
+        .order_by(AssignmentOffer.id)
+    )
+    return [
+        {**offer_dict(offer), "request": request_dict(offer.request, worker)} for offer in offers
+    ]
+
+
+def _check_open(offer: AssignmentOffer, now: datetime) -> None:
+    if offer.status != OfferStatus.PENDING or offer.request.status != S.OFFERED:
+        raise fail("OFFER_CLOSED")
+    if as_utc(offer.response_deadline) <= now:
+        raise fail("OFFER_EXPIRED")
+
+
+def accept_offer(
+    offer: AssignmentOffer, worker: User, eta_minutes, now: datetime | None = None
+) -> CleaningRequest:
+    now = now or utcnow()
+    request = offer.request
+    if offer.status == OfferStatus.ACCEPTED:
+        return request
+    if type(eta_minutes) is not int or not 0 < eta_minutes <= ETA_MAX or eta_minutes % ETA_STEP:
+        raise fail("BAD_ETA", "eta_minutes")
+    _check_open(offer, now)
+    try:
+        offer.status = OfferStatus.ACCEPTED
+        request.accepted_at = now
+        request.original_eta_minutes = request.latest_eta_minutes = eta_minutes
+        worker.worker_profile.availability = WorkerAvailability.BUSY
+        payload = {"eta_minutes": eta_minutes}
+        transition(request, S.ACCEPTED_QUEUED, actor=worker, event_type="ACCEPTED", payload=payload)
+        record_audit("OFFER_ACCEPTED", "cleaning_request", request.id, actor=worker, after=payload)
+        payload = {**_notification_payload(request), "worker": worker.name, "eta": eta_minutes}
+        notify(request.student, "OFFER_ACCEPTED", payload)
+        notify_supervisors("OFFER_ACCEPTED", payload)
+        db.session.commit()
+    except StaleDataError:
+        db.session.rollback()
+        return _settled(request.id, lambda _: offer.status == OfferStatus.ACCEPTED)
+    return request
+
+
+def _end_offer(offer: AssignmentOffer, status: OfferStatus, actor: User | None, reason: str):
+    request = offer.request
+    try:
+        offer.status = status
+        request.assigned_worker = None
+        payload = {"worker_id": offer.worker_id, "reason": reason}
+        transition(
+            request, S.AWAITING_REASSIGNMENT, actor=actor, event_type=status.value, payload=payload
+        )
+        action = f"OFFER_{status.value}"
+        record_audit(action, "cleaning_request", request.id, actor=actor, after=payload)
+        payload = {**_notification_payload(request), "worker": offer.worker.name, "reason": reason}
+        notify_supervisors(action, payload)
+        db.session.commit()
+    except StaleDataError:
+        db.session.rollback()
+        return _settled(request.id, lambda _: offer.status == status)
+    return request
+
+
+def decline_offer(
+    offer: AssignmentOffer, worker: User, reason, now: datetime | None = None
+) -> CleaningRequest:
+    if offer.status == OfferStatus.DECLINED:
+        return offer.request
+    reason = clean_text(reason, "reason", "The reason")
+    if not reason:
+        raise fail("DECLINE_REASON", "reason")
+    _check_open(offer, now or utcnow())
+    offer.decline_reason = reason
+    return _end_offer(offer, OfferStatus.DECLINED, worker, reason)
+
+
+def time_out_offers(now: datetime | None = None) -> int:
+    now = now or utcnow()
+    timed_out = 0
+    pending = db.select(AssignmentOffer.id).filter_by(status=OfferStatus.PENDING)
+    for offer_id in db.session.scalars(pending).all():
+        offer = db.session.get(AssignmentOffer, offer_id)
+        if offer.status != OfferStatus.PENDING or as_utc(offer.response_deadline) > now:
+            continue
+        try:
+            _end_offer(offer, OfferStatus.TIMED_OUT, None, "NO_RESPONSE")
+            timed_out += 1
+        except ApiError:
+            db.session.rollback()
+    return timed_out
 
 
 def offer_dict(offer: AssignmentOffer | None) -> dict | None:
@@ -624,6 +734,7 @@ def request_summary(request: CleaningRequest) -> dict:
         "assigned_worker": _person(request.assigned_worker),
         "accepted_at": _iso(request.accepted_at),
         "latest_eta_minutes": request.latest_eta_minutes,
+        "eta_label": _eta_label(request),
         "created_at": _iso(request.created_at),
         "closed_at": _iso(request.closed_at),
         "resolution_reason": request.resolution_reason,
@@ -633,6 +744,13 @@ def request_summary(request: CleaningRequest) -> dict:
 def _clock(value: datetime) -> str:
     local = hostel_now(as_utc(value))
     return f"{local.hour % 12 or 12}:{local:%M} {'am' if local.hour < 12 else 'pm'}"
+
+
+def _eta_label(request: CleaningRequest) -> str | None:
+    if request.status not in (S.ACCEPTED_QUEUED, S.EN_ROUTE):
+        return None
+    due = as_utc(request.accepted_at) + timedelta(minutes=request.latest_eta_minutes)
+    return f"{request.assigned_worker.name}, expected by {_clock(due)}"
 
 
 def availability_label(request: CleaningRequest, now: datetime) -> str:

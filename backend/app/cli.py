@@ -5,7 +5,8 @@ from flask import Flask
 
 from app.auth.passwords import hash_password
 from app.cleaning.models import CleaningRequest, RequestStatus
-from app.cleaning.service import approve_request, offer_request, submit_request
+from app.cleaning.service import accept_offer, approve_request, offer_request, submit_request
+from app.cleaning.timers import run_due
 from app.common.errors import ApiError
 from app.common.time import HOSTEL_TZ, hostel_now
 from app.credits.service import grant_weekly_credits
@@ -136,6 +137,18 @@ def register_cli(app: Flask) -> None:
             worker = db.session.scalar(db.select(User).filter_by(login_id="demo.worker"))
             offer_request(waiting, supervisor, worker.id, waiting.lock_version)
             click.echo(f"offered  request {waiting.id} to demo.worker")
+        student, worker = (
+            db.session.scalar(db.select(User).filter_by(login_id=login_id))
+            for login_id in ("demo.student6", "demo.worker2")
+        )
+        request = db.session.scalar(
+            db.select(CleaningRequest).filter_by(student=student, status=RequestStatus.SUBMITTED)
+        )
+        if request:
+            approve_request(request, supervisor)
+            offer_request(request, supervisor, worker.id, request.lock_version)
+            accept_offer(request.offers[-1], worker, 15)
+            click.echo(f"accepted request {request.id} by demo.worker2, ETA 15 min")
 
     @app.cli.command("grant-weekly-credits")
     @click.option(
@@ -149,6 +162,13 @@ def register_cli(app: Flask) -> None:
         summary = grant_weekly_credits(now)
         db.session.commit()
         click.echo(f"Weekly credits: {_summary_text(summary)}")
+
+    @app.cli.command("run-timers")
+    def run_timers_command():
+        result = run_due()
+        click.echo(f"Offers timed out: {result['offers_timed_out']}")
+        click.echo(f"Location reminders sent: {result['locations_reminded']}")
+        click.echo(f"Weekly credits: {_summary_text(result['weekly_credits'])}")
 
 
 def _summary_text(summary: dict) -> str:

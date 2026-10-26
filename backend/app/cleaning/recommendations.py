@@ -1,10 +1,11 @@
 from datetime import datetime
 
-from app.cleaning.models import CleaningRequest
+from app.cleaning.models import CleaningRequest, OfferStatus
 from app.workers.service import list_workers
 
 NEARBY_FLOORS = 2
 SOON_MINUTES = 10
+REFUSED = (OfferStatus.DECLINED, OfferStatus.TIMED_OUT)
 REASONS = {
     1: "Available on the same floor ({place}).",
     2: "Busy on the same floor ({place}), free in about {minutes} min.",
@@ -52,11 +53,12 @@ def _warnings(worker: dict) -> list[str]:
 def recommend(request: CleaningRequest, now: datetime | None = None) -> list[dict]:
     floor = request.room_snapshot["floor"]
     ranked = []
+    refused = {offer.worker_id for offer in request.offers if offer.status in REFUSED}
     for worker in list_workers(now):
         location = worker["last_location"]
         distance = abs(location["floor"] - floor) if location else None
         rank = tier(worker["availability"], distance, worker["busy_minutes"])
-        if rank:
+        if rank and worker["id"] not in refused:
             pick = {
                 "worker": worker,
                 "tier": rank,

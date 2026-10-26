@@ -12,6 +12,7 @@ class BaseConfig:
     CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",")
     RATELIMIT_STORAGE_URI = os.environ.get("RATELIMIT_STORAGE_URI", "memory://")
     LOGIN_RATE_LIMIT = "20 per minute"
+    TIMERS_ENABLED = os.environ.get("TIMERS_ENABLED", "1") == "1"
 
     LOGIN_MAX_FAILURES = 5
     LOGIN_FAILURE_WINDOW = timedelta(minutes=15)
@@ -27,6 +28,7 @@ class TestingConfig(BaseConfig):
     TESTING = True
     SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
     RATELIMIT_ENABLED = False
+    TIMERS_ENABLED = False
 
 
 class ProductionConfig(BaseConfig):
