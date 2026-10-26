@@ -9,6 +9,7 @@ import { HomePage } from "../features/home/HomePage";
 import { NotificationsPage } from "../features/notifications/NotificationsPage";
 import { ProfilePage } from "../features/profile/ProfilePage";
 import { SectionPage } from "../pages/SectionPage";
+import { WorkersPage } from "../features/workers/WorkersPage";
 import { useAuth } from "../features/auth/AuthContext";
 import { AppShell } from "./AppShell";
 import { RequireAuth } from "./RequireAuth";
@@ -51,6 +52,14 @@ export function AppRoutes() {
             element={
               <RequireRole roles={["SUPER_ADMIN"]}>
                 <HostelStructurePage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/workers"
+            element={
+              <RequireRole roles={["SUPERVISOR", "SUPER_ADMIN"]}>
+                <WorkersPage />
               </RequireRole>
             }
           />

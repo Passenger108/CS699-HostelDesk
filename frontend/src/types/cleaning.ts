@@ -68,12 +68,18 @@ export interface RequestSummary {
   resolution_reason: string | null;
 }
 
+export interface Offer {
+  status: "PENDING" | "ACCEPTED" | "DECLINED" | "TIMED_OUT" | "WITHDRAWN";
+  summary: string;
+}
+
 export interface CleaningRequest extends RequestSummary {
   urgent_reason: string | null;
   note: string | null;
   contact_phone: string;
   lock_version: number;
   actions: string[];
+  offer: Offer | null;
   timeline: RequestEvent[];
 }
 

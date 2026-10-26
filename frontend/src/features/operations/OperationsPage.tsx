@@ -65,6 +65,9 @@ function RequestDrawer({ id, onClose }: { id: number; onClose: () => void }) {
           <h2>
             Request {data.request.id} · {data.request.student.name}
           </h2>
+          {data.request.offer?.status === "PENDING" && (
+            <p className="request-card__note">{data.request.offer.summary}</p>
+          )}
           <RequestDetails request={data.request} />
         </>
       )}
