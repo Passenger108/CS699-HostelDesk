@@ -95,6 +95,12 @@ export function RequestDetails({ request }: { request: CleaningRequest }) {
           <dt>When</dt>
           <dd>{request.availability.label}</dd>
         </div>
+        {request.eta_label && (
+          <div className="field">
+            <dt>Worker</dt>
+            <dd>{request.eta_label}</dd>
+          </div>
+        )}
         <div className="field">
           <dt>Credit</dt>
           <dd>
