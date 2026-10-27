@@ -4,7 +4,17 @@ import pytest
 
 from app.cleaning.models import AssignmentOffer, OfferStatus, RequestStatus
 from app.cleaning.recommendations import recommend, tier
-from app.cleaning.service import approve_request, cancel_by_student, offer_request, submit_request
+from app.cleaning.service import (
+    accept_offer,
+    approve_request,
+    cancel_by_student,
+    decline_offer,
+    offer_request,
+    request_dict,
+    submit_request,
+    time_out_offers,
+)
+from app.cleaning.timers import _state, run_due
 from app.common.audit import AuditLog
 from app.common.errors import ApiError
 from app.common.models import as_utc
@@ -13,7 +23,12 @@ from app.extensions import db
 from app.hostel_structure.service import find_location, find_room
 from app.notifications.models import Notification
 from app.users.models import Role, StudentProfile, WorkerAvailability, WorkerProfile
-from app.workers.service import correct_location, update_location, worker_dict
+from app.workers.service import (
+    correct_location,
+    remind_stale_locations,
+    update_location,
+    worker_dict,
+)
 
 NOW = datetime(2026, 10, 22, 4, 30, tzinfo=timezone.utc)
 S = RequestStatus
@@ -242,3 +257,118 @@ def test_recommend_and_offer_api(client, login, approved, make_worker):
     assert data["offer"]["worker"]["name"] == "W1" and data["offer"]["status"] == "PENDING"
     assert data["offer"]["summary"].startswith("Offered to W1 until ")
     assert client.get(url, headers=own).get_json()["request"]["status"] == "OFFERED"
+
+
+@pytest.fixture
+def offered(approved, boss, make_worker):
+    worker = make_worker("w1", 1)
+    offer_request(approved, boss, worker.id, approved.lock_version, NOW)
+    return approved.offers[0]
+
+
+def later(minutes):
+    return NOW + timedelta(minutes=minutes)
+
+
+def test_accept_queues_request_and_notifies(offered, boss, resident):
+    worker, request = offered.worker, offered.request
+    accept_offer(offered, worker, 15, later(1))
+    assert (request.status, offered.status) == (S.ACCEPTED_QUEUED, OfferStatus.ACCEPTED)
+    assert (request.original_eta_minutes, request.latest_eta_minutes) == (15, 15)
+    assert worker.worker_profile.availability == WorkerAvailability.BUSY
+    assert request.events[-1].event_type == "ACCEPTED"
+    assert request_dict(request, resident)["eta_label"] == "W1, expected by 10:16 am"
+    notes = db.session.scalars(db.select(Notification).filter_by(type="OFFER_ACCEPTED")).all()
+    assert {(n.user_id, n.payload_json["eta"]) for n in notes} == {(resident.id, 15), (boss.id, 15)}
+    assert accept_offer(offered, worker, 30, later(2)).latest_eta_minutes == 15
+
+
+@pytest.mark.parametrize("eta", [0, 3, 125, "15", None, True, 7.5])
+def test_accept_needs_eta_in_steps_of_five(offered, eta):
+    assert error_of(accept_offer, offered, offered.worker, eta, later(1)).code == "INVALID_ETA"
+
+
+def test_answer_only_while_open(offered, resident):
+    assert error_of(accept_offer, offered, offered.worker, 15, later(5)).code == "OFFER_EXPIRED"
+    cancel_by_student(offered.request, resident)
+    assert error_of(decline_offer, offered, offered.worker, "x", later(1)).code == "OFFER_CLOSED"
+
+
+def test_decline_reopens_and_skips_worker(offered, boss, make_worker):
+    worker, request = offered.worker, offered.request
+    other = make_worker("w2", 1)
+    assert error_of(decline_offer, offered, worker, " ", later(1)).code == "REASON_REQUIRED"
+    decline_offer(offered, worker, "Too far", later(1))
+    assert (request.status, request.assigned_worker) == (S.AWAITING_REASSIGNMENT, None)
+    assert (offered.status, offered.decline_reason) == (OfferStatus.DECLINED, "Too far")
+    note = db.session.scalar(db.select(Notification).filter_by(type="OFFER_DECLINED"))
+    assert (note.user_id, note.payload_json["reason"]) == (boss.id, "Too far")
+    assert [p["worker"]["id"] for p in recommend(request, later(1))] == [other.id]
+    offer_request(request, boss, worker.id, request.lock_version, later(2))
+    assert request.offers[-1].explanation == "Chosen by the supervisor from the full list."
+
+
+def test_timeout_is_safe_to_run_twice(offered, boss):
+    request = offered.request
+    assert time_out_offers(later(4)) == 0
+    assert (time_out_offers(later(5)), time_out_offers(later(6))) == (1, 0)
+    assert (request.status, offered.status) == (S.AWAITING_REASSIGNMENT, OfferStatus.TIMED_OUT)
+    assert request.events[-1].payload_json["reason"] == "NO_RESPONSE"
+    assert db.session.scalar(db.select(Notification).filter_by(type="OFFER_TIMED_OUT")) is not None
+    assert recommend(request, later(6)) == []
+
+
+def test_accepted_offer_never_times_out_and_cancel_frees_worker(offered, resident):
+    worker = offered.worker
+    accept_offer(offered, worker, 10, later(1))
+    assert time_out_offers(later(30)) == 0
+    assert worker_dict(worker, later(2))["tasks"][0]["status"] == "Worker accepted"
+    cancel_by_student(offered.request, resident)
+    assert worker.worker_profile.availability == WorkerAvailability.AVAILABLE
+
+
+def test_timers_grant_weekly_credit_once(app, offered, resident):
+    _state["week"] = None
+    first, second = run_due(later(10)), run_due(later(11))
+    credits = {"granted": 0, "capped": 0, "already": 1}
+    assert first == {"offers_timed_out": 1, "locations_reminded": 0, "weekly_credits": credits}
+    assert second["weekly_credits"] is None
+    output = app.test_cli_runner().invoke(args=["run-timers"]).output
+    assert "Offers timed out: 0" in output and "Weekly credits: " in output
+
+
+def test_stale_location_reminder_is_sent_once(make_worker):
+    worker = make_worker("w1", 1, minutes_ago=45)
+    make_worker("off", 1, availability="OFF_DUTY", minutes_ago=45)
+    make_worker("fresh", 1)
+    make_worker("never")
+    assert (remind_stale_locations(NOW), remind_stale_locations(NOW)) == (1, 0)
+    note = db.session.scalar(db.select(Notification).filter_by(type="LOCATION_STALE"))
+    assert (note.user_id, note.payload_json) == (worker.id, {"minutes": 45})
+    soon = datetime.now(timezone.utc) + timedelta(hours=1)
+    update_location(worker, find_location(2, "A").id, soon)
+    assert remind_stale_locations(soon + timedelta(hours=1)) == 2
+
+
+def test_offer_response_api(client, login, approved, make_worker, resident):
+    worker = make_worker("w1", 1)
+    make_worker("w2", 1)
+    sup, own, other = headers(login, "sup"), headers(login, "w1"), headers(login, "w2")
+    body = {"worker_id": worker.id, "lock_version": approved.lock_version}
+    client.post(f"/api/v1/cleaning/requests/{approved.id}/offers", json=body, headers=sup)
+    url = "/api/v1/worker/offers"
+    assert client.get(url, headers=sup).status_code == 403
+    listed = client.get(url, headers=own).get_json()["offers"]
+    assert [o["request"]["contact_phone"] for o in listed] == ["+91 90000 11111"]
+    accept = f"{url}/{listed[0]['id']}/accept"
+    assert client.post(accept, json={"eta_minutes": 20}, headers=other).status_code == 404
+    assert client.post(f"{url}/{listed[0]['id']}/decline", json={}, headers=own).status_code == 400
+    res = client.post(accept, json={"eta_minutes": 20}, headers=own)
+    assert res.get_json()["request"]["status"] == "ACCEPTED_QUEUED"
+    assert client.get(url, headers=own).get_json()["offers"] == []
+    mine = client.get(
+        f"/api/v1/cleaning/requests/{approved.id}", headers=headers(login, "resident")
+    )
+    assert mine.get_json()["request"]["eta_label"].startswith("W1, expected by ")
+    tasks = client.get("/api/v1/me", headers=own).get_json()["profile"]["tasks"]
+    assert [t["room"] for t in tasks] == ["A102"]

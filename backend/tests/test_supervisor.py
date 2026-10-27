@@ -268,6 +268,7 @@ def test_seed_demo_requests_is_repeatable(app):
     assert (first.count("created "), again.count("exists ")) == (4, 4)
     assert first.count("AWAITING_ASSIGNMENT") == 1
     assert (first.count("placed "), first.count("offered "), again.count("offered ")) == (2, 1, 0)
+    assert "accepted request 4 by demo.worker2, ETA 15 min" in first
 
 
 @pytest.mark.parametrize(
