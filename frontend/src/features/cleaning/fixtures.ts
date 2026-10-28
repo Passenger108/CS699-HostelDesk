@@ -60,6 +60,7 @@ export const submittedRequest: CleaningRequest = {
   assigned_worker: null,
   accepted_at: null,
   latest_eta_minutes: null,
+  eta_label: null,
   created_at: "2026-10-17T05:00:00+00:00",
   closed_at: null,
   resolution_reason: null,

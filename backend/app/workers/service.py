@@ -9,7 +9,9 @@ from app.common.models import as_utc, utcnow
 from app.extensions import db
 from app.hostel_structure.models import Location
 from app.hostel_structure.service import location_dict
-from app.users.models import AccountStatus, Role, User, WorkerProfile
+from app.notifications.models import Notification
+from app.notifications.service import notify
+from app.users.models import AccountStatus, Role, User, WorkerAvailability, WorkerProfile
 
 FRESH_MINUTES = 30
 AVAILABILITY_LABELS = {"AVAILABLE": "Available", "BUSY": "Busy", "OFF_DUTY": "Off duty"}
@@ -134,3 +136,30 @@ def correct_location(
     if not reason:
         raise fail("LOCATION_REASON", "reason")
     return _move(get_worker(worker_id), location_id, supervisor, reason, now)
+
+
+def remind_stale_locations(now: datetime | None = None) -> int:
+    now = now or utcnow()
+    reminded = 0
+    workers = db.session.scalars(
+        db.select(User).filter_by(role=Role.WORKER, account_status=AccountStatus.ACTIVE)
+    )
+    for worker in workers.all():
+        profile = worker.worker_profile
+        if profile is None or profile.availability == WorkerAvailability.OFF_DUTY:
+            continue
+        fields = worker_fields(profile, now)
+        if fields["freshness"] != "STALE":
+            continue
+        sent = db.session.scalar(
+            db.select(Notification.id).filter(
+                Notification.user_id == worker.id,
+                Notification.type == "LOCATION_STALE",
+                Notification.created_at >= profile.location_updated_at,
+            )
+        )
+        if sent is None:
+            notify(worker, "LOCATION_STALE", {"minutes": fields["location_age_minutes"]})
+            reminded += 1
+    db.session.commit()
+    return reminded

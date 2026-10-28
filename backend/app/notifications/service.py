@@ -24,6 +24,19 @@ TEMPLATES = {
         "New cleaning offer",
         "Room {room} needs cleaning. Please accept or decline within {minutes} minutes.",
     ),
+    "OFFER_ACCEPTED": (
+        "Worker assigned",
+        "{worker} will clean room {room}, arriving in about {eta} minutes.",
+    ),
+    "OFFER_DECLINED": ("Offer declined", "{worker} declined room {room}: {reason}"),
+    "OFFER_TIMED_OUT": (
+        "Offer not answered",
+        "{worker} did not answer the offer for room {room} in time.",
+    ),
+    "LOCATION_STALE": (
+        "Update your location",
+        "Your location was last updated {minutes} minutes ago. Please update it.",
+    ),
     "REQUEST_CANCELLED_BY_STUDENT": (
         "Request cancelled",
         "The student in room {room} cancelled their cleaning request.",

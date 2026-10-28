@@ -1,6 +1,6 @@
 import type { CleaningRequest } from "../types/cleaning";
 import type { LocationInfo } from "../types/hostel";
-import type { Recommendation, Worker } from "../types/worker";
+import type { Recommendation, Worker, WorkerOffer } from "../types/worker";
 import { apiFetch } from "./client";
 
 export const fetchWorkers = () => apiFetch<{ workers: Worker[] }>("/workers");
@@ -31,4 +31,17 @@ export const sendOffer = (
   apiFetch<{ request: CleaningRequest }>(`/cleaning/requests/${id}/offers`, {
     method: "POST",
     body: JSON.stringify({ worker_id, lock_version }),
+  });
+
+export const fetchOffers = () =>
+  apiFetch<{ offers: WorkerOffer[] }>("/worker/offers");
+
+export const answerOffer = (
+  id: number,
+  answer: "accept" | "decline",
+  body: { eta_minutes: number } | { reason: string },
+) =>
+  apiFetch<{ request: CleaningRequest }>(`/worker/offers/${id}/${answer}`, {
+    method: "POST",
+    body: JSON.stringify(body),
   });

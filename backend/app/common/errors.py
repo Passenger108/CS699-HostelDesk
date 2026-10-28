@@ -73,6 +73,11 @@ ERRORS = {
     "WORKER_NOT_FOUND": (404, "This worker does not exist."),
     "WORKER_OFF_DUTY": (409, "This worker is off duty and cannot get offers."),
     "CANNOT_OFFER": (409, "Only an approved request that is waiting for a worker can be offered."),
+    "OFFER_NOT_FOUND": (404, "This offer does not exist."),
+    "OFFER_CLOSED": (409, "This offer is no longer open."),
+    "OFFER_EXPIRED": (409, "The time to answer this offer has run out."),
+    "BAD_ETA": (400, "Choose an arrival time from 5 to 120 minutes, in steps of 5.", "INVALID_ETA"),
+    "DECLINE_REASON": (400, "Give a reason for declining.", "REASON_REQUIRED"),
 }
 
 

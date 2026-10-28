@@ -63,6 +63,7 @@ export interface RequestSummary {
   assigned_worker: Person | null;
   accepted_at: string | null;
   latest_eta_minutes: number | null;
+  eta_label: string | null;
   created_at: string;
   closed_at: string | null;
   resolution_reason: string | null;

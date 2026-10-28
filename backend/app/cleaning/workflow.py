@@ -154,6 +154,9 @@ EVENT_LABELS: dict[str, str] = {
     "APPROVED": "Approved by the supervisor",
     "DETAILS_CHANGED": "Priority or time changed by the supervisor",
     "OFFERED": "Offered to a worker",
+    "ACCEPTED": "Accepted by the worker",
+    "DECLINED": "Declined by the worker",
+    "TIMED_OUT": "Offer not answered in time",
 }
 
 

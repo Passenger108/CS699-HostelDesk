@@ -30,9 +30,11 @@ def create_app(config_name: str | None = None) -> Flask:
     register_error_handlers(app)
     _register_blueprints(app)
 
+    from app.cleaning.timers import start_timers
     from app.cli import register_cli
 
     register_cli(app)
+    app.before_request(lambda: start_timers(app))
     return app
 
 
@@ -45,6 +47,7 @@ def _register_blueprints(app: Flask) -> None:
     from app.notifications.routes import bp as notifications_bp
     from app.users.routes import bp as users_bp
     from app.workers.routes import bp as workers_bp
+    from app.workers.routes import offers_bp
 
     api = Blueprint("api", __name__, url_prefix="/api/v1")
 
@@ -59,4 +62,5 @@ def _register_blueprints(app: Flask) -> None:
     api.register_blueprint(cleaning_bp)
     api.register_blueprint(notifications_bp)
     api.register_blueprint(workers_bp)
+    api.register_blueprint(offers_bp)
     app.register_blueprint(api)
