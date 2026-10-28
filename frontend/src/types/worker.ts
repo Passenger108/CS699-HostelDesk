@@ -1,3 +1,4 @@
+import type { CleaningRequest, Offer } from "./cleaning";
 import type { WorkerProfile } from "./profile";
 
 export interface Worker extends WorkerProfile {
@@ -10,4 +11,10 @@ export interface Recommendation {
   worker: Worker;
   reason: string;
   warnings: string[];
+}
+
+export interface WorkerOffer extends Offer {
+  id: number;
+  response_deadline: string;
+  request: CleaningRequest;
 }
