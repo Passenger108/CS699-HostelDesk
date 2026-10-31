@@ -101,7 +101,7 @@ def worker_dict(worker: User, now: datetime | None = None) -> dict:
         "name": worker.name,
         "phone": worker.phone,
         **worker_fields(worker.worker_profile, now),
-        "tasks": [{key: row[key] for key in ("id", "room", "status")} for row in rows],
+        "tasks": rows,
         "busy_minutes": busy_minutes(tasks, now),
         "queue_warning": f"{late} of {len(rows)} tasks may be late." if late else None,
         "off_duty_requested_at": requested.isoformat() if requested else None,

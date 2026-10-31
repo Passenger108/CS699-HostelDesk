@@ -291,10 +291,6 @@ def cancel_request(request: CleaningRequest, actor: User, reason=None) -> Cleani
     return request
 
 
-def cancel_by_student(request: CleaningRequest, student: User) -> CleaningRequest:
-    return cancel_request(request, student)
-
-
 def _settled(request_id: int, done) -> CleaningRequest:
     db.session.expire_all()
     latest = db.session.get(CleaningRequest, request_id)
@@ -714,6 +710,8 @@ def allowed_actions(request: CleaningRequest, viewer: User) -> list[str]:
             "approve": request.status == S.SUBMITTED,
             "change": request.status in SUPERVISOR_CHANGEABLE,
             "offer": request.status in OFFERABLE,
+            "reassign": request.status in REASSIGNABLE,
+            "cancel": request.status in SUPERVISOR_CANCELLABLE,
         }
     else:
         checks = {
