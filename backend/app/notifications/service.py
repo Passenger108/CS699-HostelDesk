@@ -37,6 +37,20 @@ TEMPLATES = {
         "Update your location",
         "Your location was last updated {minutes} minutes ago. Please update it.",
     ),
+    "REQUEST_CANCELLED_BY_SUPERVISOR": (
+        "Request cancelled",
+        "The supervisor cancelled the cleaning of room {room}: {reason}",
+    ),
+    "TASK_REASSIGNED": ("Task taken back", "Room {room} is no longer yours: {reason}"),
+    "WORKER_CHANGED": (
+        "Worker changed",
+        "The worker for room {room} changed. The supervisor is arranging the cleaning.",
+    ),
+    "OFF_DUTY_REQUESTED": ("Off-duty request", "{worker} asked to go off duty."),
+    "OFF_DUTY_APPROVED": (
+        "You are off duty",
+        "{count} of your tasks went back to the supervisor.",
+    ),
     "REQUEST_CANCELLED_BY_STUDENT": (
         "Request cancelled",
         "The student in room {room} cancelled their cleaning request.",

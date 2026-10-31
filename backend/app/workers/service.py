@@ -2,18 +2,20 @@ import math
 from datetime import datetime, timedelta
 
 from app.cleaning.models import CleaningRequest, RequestStatus
-from app.cleaning.workflow import STATUS_LABELS
+from app.cleaning.workflow import ON_SITE_STATES, STATUS_LABELS
 from app.common.audit import record_audit
 from app.common.errors import clean_text, fail
 from app.common.models import as_utc, utcnow
+from app.common.time import clock
 from app.extensions import db
 from app.hostel_structure.models import Location
 from app.hostel_structure.service import location_dict
 from app.notifications.models import Notification
-from app.notifications.service import notify
+from app.notifications.service import notify, notify_supervisors
 from app.users.models import AccountStatus, Role, User, WorkerAvailability, WorkerProfile
 
 FRESH_MINUTES = 30
+CLEAN_MINUTES = 20
 AVAILABILITY_LABELS = {"AVAILABLE": "Available", "BUSY": "Busy", "OFF_DUTY": "Off duty"}
 S = RequestStatus
 WORK_STATES = (S.ACCEPTED_QUEUED, S.EN_ROUTE, S.ARRIVED, S.CLEANING_IN_PROGRESS)
@@ -49,7 +51,11 @@ def worker_tasks(worker_id: int) -> list[CleaningRequest]:
                 CleaningRequest.assigned_worker_id == worker_id,
                 CleaningRequest.status.in_(WORK_STATES),
             )
-            .order_by(CleaningRequest.accepted_at, CleaningRequest.id)
+            .order_by(
+                CleaningRequest.status == S.ACCEPTED_QUEUED,
+                db.func.coalesce(CleaningRequest.queue_position, 0),
+                CleaningRequest.id,
+            )
         )
     )
 
@@ -63,23 +69,42 @@ def busy_minutes(tasks: list[CleaningRequest], now: datetime) -> int:
     return max([math.ceil((end - now).total_seconds() / 60) for end in ends] + [0])
 
 
+def queue_rows(tasks: list[CleaningRequest], now: datetime) -> list[dict]:
+    rows, free = [], now
+    for task in tasks:
+        due = as_utc(task.accepted_at) + timedelta(minutes=task.latest_eta_minutes)
+        late = bool(rows) and free > due
+        rows.append(
+            {
+                "id": task.id,
+                "room": task.room_snapshot["number"],
+                "status": STATUS_LABELS[task.status],
+                "movable": task.status == S.ACCEPTED_QUEUED,
+                "due_label": f"Promised by {clock(due)}",
+                "warning": f"Earlier work ends around {clock(free)}, so this may be late."
+                if late
+                else None,
+            }
+        )
+        free = max(free, due) + timedelta(minutes=CLEAN_MINUTES)
+    return rows
+
+
 def worker_dict(worker: User, now: datetime | None = None) -> dict:
     now = now or utcnow()
     tasks = worker_tasks(worker.id)
+    rows = queue_rows(tasks, now)
+    late = sum(1 for row in rows if row["warning"])
+    requested = as_utc(worker.worker_profile.off_duty_requested_at)
     return {
         "id": worker.id,
         "name": worker.name,
         "phone": worker.phone,
         **worker_fields(worker.worker_profile, now),
-        "tasks": [
-            {
-                "id": task.id,
-                "room": task.room_snapshot["number"],
-                "status": STATUS_LABELS[task.status],
-            }
-            for task in tasks
-        ],
+        "tasks": [{key: row[key] for key in ("id", "room", "status")} for row in rows],
         "busy_minutes": busy_minutes(tasks, now),
+        "queue_warning": f"{late} of {len(rows)} tasks may be late." if late else None,
+        "off_duty_requested_at": requested.isoformat() if requested else None,
     }
 
 
@@ -163,3 +188,25 @@ def remind_stale_locations(now: datetime | None = None) -> int:
             reminded += 1
     db.session.commit()
     return reminded
+
+
+def request_off_duty(worker: User, now: datetime | None = None) -> User:
+    profile = worker.worker_profile
+    if profile.availability == WorkerAvailability.OFF_DUTY:
+        raise fail("ALREADY_OFF_DUTY")
+    if profile.off_duty_requested_at is None:
+        if any(task.status in ON_SITE_STATES for task in worker_tasks(worker.id)):
+            raise fail("OFF_DUTY_ON_SITE")
+        profile.off_duty_requested_at = now or utcnow()
+        record_audit("OFF_DUTY_REQUESTED", "worker", worker.id, actor=worker)
+        notify_supervisors("OFF_DUTY_REQUESTED", {"worker": worker.name})
+        db.session.commit()
+    return worker
+
+
+def return_to_duty(worker: User) -> User:
+    if worker.worker_profile.availability == WorkerAvailability.OFF_DUTY:
+        worker.worker_profile.availability = WorkerAvailability.AVAILABLE
+        record_audit("BACK_ON_DUTY", "worker", worker.id, actor=worker)
+        db.session.commit()
+    return worker

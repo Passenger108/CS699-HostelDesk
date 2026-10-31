@@ -19,8 +19,11 @@ from app.cleaning.workflow import (
     ACTIVE_STATES,
     EVENT_LABELS,
     OFFERABLE,
+    ON_SITE_STATES,
+    REASSIGNABLE,
     STATUS_LABELS,
     STUDENT_CANCELLABLE,
+    SUPERVISOR_CANCELLABLE,
     SUPERVISOR_CHANGEABLE,
     is_terminal,
     record_event,
@@ -30,14 +33,14 @@ from app.cleaning.workflow import (
 from app.common.audit import record_audit, record_security_event
 from app.common.errors import ApiError, clean_text, fail
 from app.common.models import as_utc, utcnow
-from app.common.time import HOSTEL_TZ, hostel_now
+from app.common.time import HOSTEL_TZ, clock, hostel_now
 from app.credits.service import balance, release_credit, reserve_credit
 from app.extensions import db
 from app.hostel_structure.models import Floor, Room, Wing
 from app.hostel_structure.service import room_dict
 from app.notifications.service import notify, notify_supervisors
 from app.users.models import Role, User, WorkerAvailability
-from app.workers.service import get_worker, worker_tasks
+from app.workers.service import get_worker, worker_dict, worker_tasks
 
 KEY_LIMIT = 64
 DEFAULT_PAGE_SIZE = 20
@@ -233,46 +236,63 @@ def _after_clash(student: User, client_key: str | None) -> tuple[CleaningRequest
     raise fail("ACTIVE_REQUEST_EXISTS")
 
 
-def cancel_by_student(request: CleaningRequest, student: User) -> CleaningRequest:
-    if request.student_id != student.id:
+def cancel_request(request: CleaningRequest, actor: User, reason=None) -> CleaningRequest:
+    by_student = actor.role == Role.STUDENT
+    if by_student and request.student_id != actor.id:
         raise fail("REQUEST_NOT_FOUND")
-    if request.status == S.CANCELLED_BY_STUDENT:
+    status = S.CANCELLED_BY_STUDENT if by_student else S.CANCELLED_BY_SUPERVISOR
+    if request.status == status:
         return request
-    if request.status not in STUDENT_CANCELLABLE:
+    reason = (
+        "Cancelled by the student" if by_student else clean_text(reason, "reason", "The reason")
+    )
+    if not reason:
+        raise fail("CANCEL_REASON", "reason")
+    if request.status not in (STUDENT_CANCELLABLE if by_student else SUPERVISOR_CANCELLABLE):
         raise fail("CANNOT_CANCEL")
 
     old_state = request.status
     try:
         if request.credit_reservation == CreditReservation.RESERVED:
-            release_credit(student, request.id, "Request cancelled by the student", actor=student)
+            who = "student" if by_student else "supervisor"
+            release_credit(
+                request.student, request.id, f"Request cancelled by the {who}", actor=actor
+            )
             request.credit_reservation = CreditReservation.RELEASED
-        request.resolution_reason = "Cancelled by the student"
+        request.resolution_reason = reason
         _withdraw_offers(request)
-        transition(request, S.CANCELLED_BY_STUDENT, actor=student)
+        transition(request, status, actor=actor, payload=None if by_student else {"reason": reason})
         _free_worker(request.assigned_worker)
         record_audit(
             "REQUEST_CANCELLED",
             "cleaning_request",
             request.id,
-            actor=student,
+            actor=actor,
             before={"status": old_state.value},
             after={
                 "status": request.status.value,
                 "credit_reservation": request.credit_reservation.value,
             },
+            reason=None if by_student else reason,
         )
-        payload = _notification_payload(request)
-        notify_supervisors("REQUEST_CANCELLED_BY_STUDENT", payload)
-        if request.assigned_worker is not None:
-            notify(request.assigned_worker, "REQUEST_CANCELLED_BY_STUDENT", payload)
+        payload = {**_notification_payload(request), "reason": reason}
+        if by_student:
+            notify_supervisors("REQUEST_CANCELLED_BY_STUDENT", payload)
+        for user in (request.assigned_worker, None if by_student else request.student):
+            if user is not None:
+                notify(user, f"REQUEST_{status.value}", payload)
         db.session.commit()
     except ApiError:
         db.session.rollback()
         raise
     except (IntegrityError, StaleDataError):
         db.session.rollback()
-        return _settled(request.id, lambda latest: latest.status == S.CANCELLED_BY_STUDENT)
+        return _settled(request.id, lambda latest: latest.status == status)
     return request
+
+
+def cancel_by_student(request: CleaningRequest, student: User) -> CleaningRequest:
+    return cancel_request(request, student)
 
 
 def _settled(request_id: int, done) -> CleaningRequest:
@@ -481,6 +501,9 @@ def accept_offer(
     try:
         offer.status = OfferStatus.ACCEPTED
         request.accepted_at = now
+        request.queue_position = 1 + max(
+            (task.queue_position or 0 for task in worker_tasks(worker.id)), default=0
+        )
         request.original_eta_minutes = request.latest_eta_minutes = eta_minutes
         worker.worker_profile.availability = WorkerAvailability.BUSY
         payload = {"eta_minutes": eta_minutes}
@@ -545,6 +568,98 @@ def time_out_offers(now: datetime | None = None) -> int:
     return timed_out
 
 
+def reassign_request(
+    request: CleaningRequest, supervisor: User, reason, lock_version, worker_id=None, now=None
+) -> CleaningRequest:
+    reason = clean_text(reason, "reason", "The reason")
+    if not reason:
+        raise fail("REASSIGN_REASON", "reason")
+    if type(lock_version) is not int:
+        raise fail("BAD_LOCK_VERSION", "lock_version")
+    if request.status not in REASSIGNABLE:
+        raise fail("CANNOT_REASSIGN")
+    if lock_version != request.lock_version:
+        raise stale(request.id)
+    former = request.assigned_worker
+    try:
+        _take_back(request, supervisor, "REASSIGNED", reason)
+        record_audit(
+            "REQUEST_REASSIGNED",
+            "cleaning_request",
+            request.id,
+            actor=supervisor,
+            before={"worker_id": former.id},
+            reason=reason,
+        )
+        notify(former, "TASK_REASSIGNED", {**_notification_payload(request), "reason": reason})
+        db.session.commit()
+    except StaleDataError:
+        db.session.rollback()
+        raise stale(request.id) from None
+    if worker_id is None:
+        return request
+    return offer_request(request, supervisor, worker_id, request.lock_version, now)
+
+
+def _take_back(request: CleaningRequest, actor: User, event: str, reason: str, keep=False) -> None:
+    worker = request.assigned_worker
+    _withdraw_offers(request)
+    if not keep:
+        request.assigned_worker = request.accepted_at = request.latest_eta_minutes = None
+    payload = {"worker_id": worker.id, "reason": reason}
+    target = S.SUPERVISOR_INTERVENTION if keep else S.AWAITING_REASSIGNMENT
+    transition(request, target, actor=actor, event_type=event, payload=payload)
+    _free_worker(worker)
+    notify(request.student, "WORKER_CHANGED", _notification_payload(request))
+
+
+def reorder_queue(worker: User, actor: User, order) -> list[dict]:
+    tasks = {task.id: task for task in worker_tasks(worker.id) if task.status == S.ACCEPTED_QUEUED}
+    if type(order) is not list or any(type(item) is not int for item in order):
+        raise fail("BAD_QUEUE", "order")
+    if sorted(order) != sorted(tasks):
+        raise fail("QUEUE_CHANGED")
+    before = list(tasks)
+    try:
+        for position, request_id in enumerate(order, 1):
+            tasks[request_id].queue_position = position
+        record_audit(
+            "QUEUE_REORDERED", "worker", worker.id, actor=actor, before=before, after=order
+        )
+        db.session.commit()
+    except StaleDataError:
+        db.session.rollback()
+        raise fail("QUEUE_CHANGED") from None
+    return worker_dict(worker)["tasks"]
+
+
+def approve_off_duty(worker_id, supervisor: User) -> User:
+    worker = get_worker(worker_id)
+    profile = worker.worker_profile
+    if profile.off_duty_requested_at is None:
+        raise fail("NO_OFF_DUTY_REQUEST")
+    work = db.session.scalars(
+        db.select(CleaningRequest).filter(
+            CleaningRequest.assigned_worker_id == worker.id,
+            CleaningRequest.status.in_(REASSIGNABLE | ON_SITE_STATES),
+        )
+    ).all()
+    try:
+        profile.availability = WorkerAvailability.OFF_DUTY
+        profile.off_duty_requested_at = None
+        for request in work:
+            on_site = request.status in ON_SITE_STATES
+            _take_back(request, supervisor, "OFF_DUTY", "The worker went off duty", on_site)
+        moved = [request.id for request in work]
+        record_audit("OFF_DUTY_APPROVED", "worker", worker.id, actor=supervisor, after=moved)
+        notify(worker, "OFF_DUTY_APPROVED", {"count": len(moved)})
+        db.session.commit()
+    except StaleDataError:
+        db.session.rollback()
+        raise fail("QUEUE_CHANGED") from None
+    return worker
+
+
 def offer_dict(offer: AssignmentOffer | None) -> dict | None:
     if offer is None:
         return None
@@ -554,7 +669,7 @@ def offer_dict(offer: AssignmentOffer | None) -> dict | None:
         "status": offer.status.value,
         "response_deadline": _iso(offer.response_deadline),
         "explanation": offer.explanation,
-        "summary": f"Offered to {offer.worker.name} until {_clock(offer.response_deadline)}. "
+        "summary": f"Offered to {offer.worker.name} until {clock(offer.response_deadline)}. "
         f"{offer.explanation}",
     }
 
@@ -741,23 +856,18 @@ def request_summary(request: CleaningRequest) -> dict:
     }
 
 
-def _clock(value: datetime) -> str:
-    local = hostel_now(as_utc(value))
-    return f"{local.hour % 12 or 12}:{local:%M} {'am' if local.hour < 12 else 'pm'}"
-
-
 def _eta_label(request: CleaningRequest) -> str | None:
     if request.status not in (S.ACCEPTED_QUEUED, S.EN_ROUTE):
         return None
     due = as_utc(request.accepted_at) + timedelta(minutes=request.latest_eta_minutes)
-    return f"{request.assigned_worker.name}, expected by {_clock(due)}"
+    return f"{request.assigned_worker.name}, expected by {clock(due)}"
 
 
 def availability_label(request: CleaningRequest, now: datetime) -> str:
     day = hostel_now(as_utc(request.available_until)).date()
     today = day == hostel_now(now).date()
     if request.availability_mode == AvailabilityMode.TIME_WINDOW:
-        window = f"{_clock(request.window_start)} to {_clock(request.window_end)}"
+        window = f"{clock(request.window_start)} to {clock(request.window_end)}"
         return f"{'Today' if today else f'{day.day} {day:%b}'}, {window}"
     if request.availability_mode == AvailabilityMode.AVAILABLE_NOW:
         return "Available now" if today else f"Available on {day.day} {day:%b}"

@@ -137,18 +137,20 @@ def register_cli(app: Flask) -> None:
             worker = db.session.scalar(db.select(User).filter_by(login_id="demo.worker"))
             offer_request(waiting, supervisor, worker.id, waiting.lock_version)
             click.echo(f"offered  request {waiting.id} to demo.worker")
-        student, worker = (
-            db.session.scalar(db.select(User).filter_by(login_id=login_id))
-            for login_id in ("demo.student6", "demo.worker2")
-        )
-        request = db.session.scalar(
-            db.select(CleaningRequest).filter_by(student=student, status=RequestStatus.SUBMITTED)
-        )
-        if request:
-            approve_request(request, supervisor)
-            offer_request(request, supervisor, worker.id, request.lock_version)
-            accept_offer(request.offers[-1], worker, 15)
-            click.echo(f"accepted request {request.id} by demo.worker2, ETA 15 min")
+        worker = db.session.scalar(db.select(User).filter_by(login_id="demo.worker2"))
+        for login_id, eta in (("demo.student6", 15), ("demo.student4", 10)):
+            request = db.session.scalar(
+                db.select(CleaningRequest)
+                .join(User, CleaningRequest.student_id == User.id)
+                .filter(
+                    User.login_id == login_id, CleaningRequest.status == RequestStatus.SUBMITTED
+                )
+            )
+            if request:
+                approve_request(request, supervisor)
+                offer_request(request, supervisor, worker.id, request.lock_version)
+                accept_offer(request.offers[-1], worker, eta)
+                click.echo(f"accepted request {request.id} by demo.worker2, ETA {eta} min")
 
     @app.cli.command("grant-weekly-credits")
     @click.option(

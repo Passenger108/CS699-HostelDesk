@@ -94,6 +94,7 @@ class CleaningRequest(IdMixin, TimestampMixin, db.Model):
     accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     original_eta_minutes: Mapped[int | None] = mapped_column()
     latest_eta_minutes: Mapped[int | None] = mapped_column()
+    queue_position: Mapped[int | None] = mapped_column()
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     resolution_reason: Mapped[str | None] = mapped_column(String(500))
     lock_version: Mapped[int] = mapped_column(nullable=False)
