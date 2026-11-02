@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
 import { fetchMyProfile } from "../../api/profile";
 import { fetchOffers } from "../../api/workers";
 import { ErrorMessage } from "../../components/ErrorMessage";
@@ -7,6 +6,7 @@ import type { Worker } from "../../types/worker";
 import { WorkerDetails } from "../profile/ProfilePage";
 import { LocationForm } from "./LocationForm";
 import { OfferCard } from "./OfferCard";
+import { TaskQueue } from "./TaskQueue";
 
 export function WorkerHome() {
   const { data, error } = useQuery({
@@ -34,15 +34,7 @@ export function WorkerHome() {
       {offers?.length === 0 && <p className="muted">No offers right now.</p>}
       <section className="card">
         <h2>Your tasks</h2>
-        {profile.tasks.map((task) => (
-          <p key={task.id}>
-            <Link to={`/requests/${task.id}`}>Room {task.room}</Link> ·{" "}
-            {task.status}
-          </p>
-        ))}
-        {profile.tasks.length === 0 && (
-          <p className="muted">No accepted tasks.</p>
-        )}
+        <TaskQueue worker={profile} self />
       </section>
       <WorkerDetails profile={profile} />
       <section className="card">

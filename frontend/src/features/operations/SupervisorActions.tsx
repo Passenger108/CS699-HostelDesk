@@ -5,6 +5,7 @@ import { ErrorMessage } from "../../components/ErrorMessage";
 import type { CleaningRequest, Priority } from "../../types/cleaning";
 import { PRIORITY_LABELS } from "../cleaning/labels";
 import { AssignPanel } from "./AssignPanel";
+import { TakeBackForm } from "./TakeBackForm";
 
 export function SupervisorActions({ request }: { request: CleaningRequest }) {
   const queryClient = useQueryClient();
@@ -50,6 +51,9 @@ export function SupervisorActions({ request }: { request: CleaningRequest }) {
         <ErrorMessage error={approve.error} fallback="Could not approve." />
       )}
       {request.actions.includes("offer") && <AssignPanel request={request} />}
+      {request.actions.includes("reassign") && (
+        <TakeBackForm request={request} />
+      )}
       {request.actions.includes("change") && (
         <form
           className="stack"

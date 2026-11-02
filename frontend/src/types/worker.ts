@@ -4,7 +4,18 @@ import type { WorkerProfile } from "./profile";
 export interface Worker extends WorkerProfile {
   id: number;
   name: string;
-  tasks: { id: number; room: string; status: string }[];
+  tasks: QueueTask[];
+  queue_warning: string | null;
+  off_duty_requested_at: string | null;
+}
+
+export interface QueueTask {
+  id: number;
+  room: string;
+  status: string;
+  movable: boolean;
+  due_label: string;
+  warning: string | null;
 }
 
 export interface Recommendation {
