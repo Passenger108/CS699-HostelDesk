@@ -20,9 +20,19 @@ export const submitCleaningRequest = (body: NewCleaningRequest) =>
     body: JSON.stringify(body),
   });
 
-export const cancelCleaningRequest = (id: number) =>
+export const cancelCleaningRequest = (id: number, reason?: string) =>
   apiFetch<RequestResponse>(`/cleaning/requests/${id}/cancel`, {
     method: "POST",
+    body: reason === undefined ? undefined : JSON.stringify({ reason }),
+  });
+
+export const takeBackRequest = (
+  id: number,
+  body: { reason: string; lock_version: number; worker_id?: number },
+) =>
+  apiFetch<RequestResponse>(`/cleaning/requests/${id}/reassign`, {
+    method: "POST",
+    body: JSON.stringify(body),
   });
 
 export function requestListPath(filters: RequestFilters = {}): string {
