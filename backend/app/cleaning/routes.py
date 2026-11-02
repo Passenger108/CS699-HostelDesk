@@ -6,12 +6,13 @@ from app.cleaning.service import (
     SUPERVISOR_ROLES,
     active_request,
     approve_request,
-    cancel_by_student,
+    cancel_request,
     change_request,
     get_request_for,
     list_requests,
     offer_request,
     operations_board,
+    reassign_request,
     request_dict,
     submit_request,
 )
@@ -95,11 +96,12 @@ def get_request(request_id: int):
 
 
 @bp.post("/requests/<int:request_id>/cancel")
-@roles_required(Role.STUDENT)
-def cancel_request(request_id: int):
-    student = current_user()
-    cleaning_request = cancel_by_student(get_request_for(request_id, student), student)
-    return jsonify({"request": request_dict(cleaning_request, student)})
+@roles_required(Role.STUDENT, *SUPERVISOR_ROLES)
+def cancel(request_id: int):
+    viewer = current_user()
+    reason = json_body().get("reason") if viewer.role in SUPERVISOR_ROLES else None
+    cleaning_request = cancel_request(get_request_for(request_id, viewer), viewer, reason)
+    return jsonify({"request": request_dict(cleaning_request, viewer)})
 
 
 @bp.post("/requests/<int:request_id>/approve")
@@ -143,6 +145,21 @@ def offer(request_id: int):
         body.get("lock_version"),
     )
     return jsonify({"request": request_dict(cleaning_request, supervisor)}), 201
+
+
+@bp.post("/requests/<int:request_id>/reassign")
+@roles_required(*SUPERVISOR_ROLES)
+def reassign(request_id: int):
+    body = json_body()
+    supervisor = current_user()
+    cleaning_request = reassign_request(
+        get_request_for(request_id, supervisor),
+        supervisor,
+        body.get("reason"),
+        body.get("lock_version"),
+        body.get("worker_id"),
+    )
+    return jsonify({"request": request_dict(cleaning_request, supervisor)})
 
 
 @bp.get("/board")

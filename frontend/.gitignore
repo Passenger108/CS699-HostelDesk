@@ -5,3 +5,6 @@ dist/
 coverage/
 .env
 npm-debug.log*
+src/test/
+*.test.tsx
+vitest.config.ts

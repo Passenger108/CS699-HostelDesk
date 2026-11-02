@@ -124,6 +124,11 @@ STUDENT_CANCELLABLE = frozenset(
 )
 
 SUPERVISOR_CHANGEABLE = frozenset({S.SUBMITTED, S.AWAITING_ASSIGNMENT, S.AWAITING_REASSIGNMENT})
+ON_SITE_STATES = frozenset({S.EN_ROUTE, S.ARRIVED, S.CLEANING_IN_PROGRESS})
+REASSIGNABLE = frozenset({S.OFFERED, S.ACCEPTED_QUEUED, S.EN_ROUTE, S.ARRIVED})
+SUPERVISOR_CANCELLABLE = (STUDENT_CANCELLABLE | ON_SITE_STATES | {S.SUPERVISOR_INTERVENTION}) - {
+    S.AWAITING_STUDENT_RESCHEDULE
+}
 OFFERABLE = frozenset({S.AWAITING_ASSIGNMENT, S.AWAITING_REASSIGNMENT})
 
 STATUS_LABELS: dict[RequestStatus, str] = {
@@ -132,18 +137,18 @@ STATUS_LABELS: dict[RequestStatus, str] = {
     S.OFFERED: "Offered to a worker",
     S.AWAITING_REASSIGNMENT: "Finding another worker",
     S.ACCEPTED_QUEUED: "Worker accepted",
-    S.AWAITING_STUDENT_RESCHEDULE: "Please choose a new time",
+    S.AWAITING_STUDENT_RESCHEDULE: "Waiting for the student to choose a new time",
     S.EN_ROUTE: "Worker on the way",
-    S.ARRIVED: "Worker at your room",
+    S.ARRIVED: "Worker at the room",
     S.CLEANING_IN_PROGRESS: "Cleaning in progress",
-    S.AWAITING_STUDENT_CONFIRMATION: "Please confirm the cleaning",
+    S.AWAITING_STUDENT_CONFIRMATION: "Waiting for the student to confirm",
     S.SUPERVISOR_INTERVENTION: "Supervisor is looking into it",
     S.DISPUTED: "Disputed, under review",
     S.CLOSED_SUCCESSFUL: "Cleaned",
     S.CLOSED_VALID_AFTER_REVIEW: "Closed after review: work was valid",
     S.CLOSED_UNSATISFACTORY: "Closed after review: work was unsatisfactory",
     S.STUDENT_UNAVAILABLE: "Closed: student did not respond",
-    S.CANCELLED_BY_STUDENT: "Cancelled by you",
+    S.CANCELLED_BY_STUDENT: "Cancelled by the student",
     S.CANCELLED_BY_SUPERVISOR: "Cancelled by the supervisor",
     S.EXPIRED: "Expired",
 }
@@ -157,6 +162,9 @@ EVENT_LABELS: dict[str, str] = {
     "ACCEPTED": "Accepted by the worker",
     "DECLINED": "Declined by the worker",
     "TIMED_OUT": "Offer not answered in time",
+    "REASSIGNED": "Taken back from the worker by the supervisor",
+    "OFF_DUTY": "Worker went off duty",
+    "CANCELLED_BY_SUPERVISOR": "Cancelled by the supervisor",
 }
 
 

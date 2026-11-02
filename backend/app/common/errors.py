@@ -78,6 +78,14 @@ ERRORS = {
     "OFFER_EXPIRED": (409, "The time to answer this offer has run out."),
     "BAD_ETA": (400, "Choose an arrival time from 5 to 120 minutes, in steps of 5.", "INVALID_ETA"),
     "DECLINE_REASON": (400, "Give a reason for declining.", "REASON_REQUIRED"),
+    "CANCEL_REASON": (400, "Give a reason for cancelling.", "REASON_REQUIRED"),
+    "REASSIGN_REASON": (400, "Give a reason for taking the task back.", "REASON_REQUIRED"),
+    "CANNOT_REASSIGN": (409, "Only an offered or accepted request can be taken back."),
+    "BAD_QUEUE": (400, "order must be a list of request ids.", "INVALID_FIELD"),
+    "QUEUE_CHANGED": (409, "The task list changed. Please refresh and try again."),
+    "ALREADY_OFF_DUTY": (409, "You are already off duty."),
+    "OFF_DUTY_ON_SITE": (409, "Finish your current task before going off duty."),
+    "NO_OFF_DUTY_REQUEST": (409, "This worker has not asked to go off duty."),
 }
 
 

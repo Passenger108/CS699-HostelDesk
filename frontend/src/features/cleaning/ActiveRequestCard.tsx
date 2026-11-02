@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { cancelCleaningRequest, fetchActiveRequest } from "../../api/cleaning";
 import { ApiError } from "../../api/client";
 import { ErrorMessage } from "../../components/ErrorMessage";
+import { useAuth } from "../auth/AuthContext";
 import type { CleaningRequest } from "../../types/cleaning";
 import { SupervisorActions } from "../operations/SupervisorActions";
 import { PRIORITY_LABELS } from "./labels";
@@ -13,8 +14,11 @@ import { StatusChip } from "./StatusChip";
 function CancelControl({ request }: { request: CleaningRequest }) {
   const queryClient = useQueryClient();
   const [confirming, setConfirming] = useState(false);
+  const [reason, setReason] = useState("");
+  const staff = useAuth().user?.role !== "STUDENT";
   const cancel = useMutation({
-    mutationFn: () => cancelCleaningRequest(request.id),
+    mutationFn: () =>
+      cancelCleaningRequest(request.id, staff ? reason : undefined),
     onSuccess: () => {
       setConfirming(false);
       queryClient.invalidateQueries({ queryKey: ["cleaning"] });
@@ -44,13 +48,26 @@ function CancelControl({ request }: { request: CleaningRequest }) {
       <p>
         Cancel this request?
         {request.credit_reservation === "RESERVED" &&
-          " Your credit will be returned."}
+          (staff
+            ? " The student's credit will be returned."
+            : " Your credit will be returned.")}
       </p>
+      {staff && (
+        <label className="text-field">
+          Reason for cancelling
+          <textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            maxLength={500}
+            rows={2}
+          />
+        </label>
+      )}
       <div className="confirm__buttons">
         <button
           type="button"
           className="btn btn--danger"
-          disabled={cancel.isPending}
+          disabled={cancel.isPending || (staff && !reason.trim())}
           onClick={() => cancel.mutate()}
         >
           {cancel.isPending ? "Cancelling…" : "Yes, cancel"}

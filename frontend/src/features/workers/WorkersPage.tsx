@@ -3,6 +3,7 @@ import { useState } from "react";
 import { fetchWorkers } from "../../api/workers";
 import { ErrorMessage } from "../../components/ErrorMessage";
 import { LocationForm } from "./LocationForm";
+import { TaskQueue } from "./TaskQueue";
 
 export function WorkersPage() {
   const [editing, setEditing] = useState<number | null>(null);
@@ -25,10 +26,9 @@ export function WorkersPage() {
           <p className="muted">
             {worker.availability_label} ·{" "}
             {worker.last_location?.label ?? "No location"} ·{" "}
-            {worker.location_note} ·{" "}
-            {worker.tasks.map((t) => `${t.room}: ${t.status}`).join(", ") ||
-              "No tasks"}
+            {worker.location_note}
           </p>
+          <TaskQueue worker={worker} />
           {editing === worker.id ? (
             <LocationForm
               workerId={worker.id}

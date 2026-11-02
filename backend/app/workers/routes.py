@@ -5,13 +5,23 @@ from app.cleaning.routes import json_body
 from app.cleaning.service import (
     SUPERVISOR_ROLES,
     accept_offer,
+    approve_off_duty,
     decline_offer,
     get_offer_for,
+    reorder_queue,
     request_dict,
     worker_offers,
 )
 from app.users.models import Role
-from app.workers.service import correct_location, list_workers, update_location, worker_dict
+from app.workers.service import (
+    correct_location,
+    get_worker,
+    list_workers,
+    request_off_duty,
+    return_to_duty,
+    update_location,
+    worker_dict,
+)
 
 bp = Blueprint("workers", __name__, url_prefix="/workers")
 offers_bp = Blueprint("worker_offers", __name__, url_prefix="/worker/offers")
@@ -37,6 +47,38 @@ def correct(worker_id: int):
     location_id, reason = body.get("location_id"), body.get("reason")
     worker = correct_location(worker_id, current_user(), location_id, reason)
     return jsonify({"worker": worker_dict(worker)})
+
+
+@bp.put("/me/queue")
+@roles_required(Role.WORKER)
+def my_queue():
+    worker = current_user()
+    return jsonify({"tasks": reorder_queue(worker, worker, json_body().get("order"))})
+
+
+@bp.put("/<int:worker_id>/queue")
+@roles_required(*SUPERVISOR_ROLES)
+def queue(worker_id: int):
+    order = json_body().get("order")
+    return jsonify({"tasks": reorder_queue(get_worker(worker_id), current_user(), order)})
+
+
+@bp.post("/me/off-duty-request")
+@roles_required(Role.WORKER)
+def ask_off_duty():
+    return jsonify({"worker": worker_dict(request_off_duty(current_user()))})
+
+
+@bp.post("/me/on-duty")
+@roles_required(Role.WORKER)
+def on_duty():
+    return jsonify({"worker": worker_dict(return_to_duty(current_user()))})
+
+
+@bp.post("/<int:worker_id>/off-duty/approve")
+@roles_required(*SUPERVISOR_ROLES)
+def off_duty(worker_id: int):
+    return jsonify({"worker": worker_dict(approve_off_duty(worker_id, current_user()))})
 
 
 @offers_bp.get("")

@@ -1,6 +1,11 @@
 import type { CleaningRequest } from "../types/cleaning";
 import type { LocationInfo } from "../types/hostel";
-import type { Recommendation, Worker, WorkerOffer } from "../types/worker";
+import type {
+  QueueTask,
+  Recommendation,
+  Worker,
+  WorkerOffer,
+} from "../types/worker";
 import { apiFetch } from "./client";
 
 export const fetchWorkers = () => apiFetch<{ workers: Worker[] }>("/workers");
@@ -45,3 +50,13 @@ export const answerOffer = (
     method: "POST",
     body: JSON.stringify(body),
   });
+
+export const reorderQueue = (id: number | "me", order: number[]) =>
+  apiFetch<{ tasks: QueueTask[] }>(`/workers/${id}/queue`, {
+    method: "PUT",
+    body: JSON.stringify({ order }),
+  });
+
+export const changeDuty = (
+  path: "me/off-duty-request" | "me/on-duty" | `${number}/off-duty/approve`,
+) => apiFetch<{ worker: Worker }>(`/workers/${path}`, { method: "POST" });
