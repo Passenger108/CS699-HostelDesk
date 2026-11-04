@@ -250,6 +250,9 @@ def cancel_request(request: CleaningRequest, actor: User, reason=None) -> Cleani
         raise fail("CANCEL_REASON", "reason")
     if request.status not in (STUDENT_CANCELLABLE if by_student else SUPERVISOR_CANCELLABLE):
         raise fail("CANNOT_CANCEL")
+    deadline = as_utc(request.response_deadline)
+    if by_student and request.status == S.ARRIVED and deadline and deadline <= utcnow():
+        raise fail("RESPONSE_CLOSED")
 
     old_state = request.status
     try:
@@ -397,9 +400,9 @@ def change_request(
     return request
 
 
-def _withdraw_offers(request: CleaningRequest) -> None:
+def _withdraw_offers(request: CleaningRequest, accepted=False) -> None:
     for offer in request.offers:
-        if offer.status == OfferStatus.PENDING:
+        if offer.status == OfferStatus.PENDING or accepted and offer.status == OfferStatus.ACCEPTED:
             offer.status = OfferStatus.WITHDRAWN
 
 
@@ -599,7 +602,7 @@ def reassign_request(
 
 def _take_back(request: CleaningRequest, actor: User, event: str, reason: str, keep=False) -> None:
     worker = request.assigned_worker
-    _withdraw_offers(request)
+    _withdraw_offers(request, not keep)
     if not keep:
         request.assigned_worker = request.accepted_at = request.latest_eta_minutes = None
     payload = {"worker_id": worker.id, "reason": reason}

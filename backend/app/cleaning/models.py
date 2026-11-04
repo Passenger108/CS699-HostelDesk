@@ -52,6 +52,12 @@ class CreditReservation(str, enum.Enum):
     RELEASED = "RELEASED"
 
 
+class ArrivalResponse(str, enum.Enum):
+    COME_IN = "COME_IN"
+    WAIT_REQUESTED = "WAIT_REQUESTED"
+    WAITING = "WAITING"
+
+
 class OfferStatus(str, enum.Enum):
     PENDING = "PENDING"
     ACCEPTED = "ACCEPTED"
@@ -95,6 +101,8 @@ class CleaningRequest(IdMixin, TimestampMixin, db.Model):
     original_eta_minutes: Mapped[int | None] = mapped_column()
     latest_eta_minutes: Mapped[int | None] = mapped_column()
     queue_position: Mapped[int | None] = mapped_column()
+    arrival_response: Mapped[str | None] = mapped_column(String(20))
+    response_deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     resolution_reason: Mapped[str | None] = mapped_column(String(500))
     lock_version: Mapped[int] = mapped_column(nullable=False)

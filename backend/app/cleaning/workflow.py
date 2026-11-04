@@ -1,8 +1,10 @@
+from datetime import datetime
 from typing import Any
 
+from app.cleaning.models import ArrivalResponse as R
 from app.cleaning.models import CleaningRequest, RequestEvent, RequestStatus
 from app.common.errors import ApiError, fail
-from app.common.models import utcnow
+from app.common.models import as_utc, utcnow
 from app.extensions import db
 
 S = RequestStatus
@@ -165,6 +167,13 @@ EVENT_LABELS: dict[str, str] = {
     "REASSIGNED": "Taken back from the worker by the supervisor",
     "OFF_DUTY": "Worker went off duty",
     "CANCELLED_BY_SUPERVISOR": "Cancelled by the supervisor",
+    "COME_IN": "The student said come in",
+    "WAIT_REQUESTED": "The student asked the worker to wait",
+    "WAIT_ACCEPTED": "The worker agreed to wait",
+    "WAIT_REFUSED": "The worker could not wait",
+    "PROBLEM_REPORTED": "The worker reported a problem",
+    "STARTED": "Cleaning started",
+    "RESUMED": "The supervisor let the work continue",
 }
 
 
@@ -223,3 +232,24 @@ def transition(
     event = record_event(request, event_type or new_state.value, actor, old_state, payload)
     db.session.flush()
     return event
+
+
+def can_leave(request: CleaningRequest, tasks: list[CleaningRequest]) -> bool:
+    return not any(task.status in ON_SITE_STATES for task in tasks) and tasks[0].id == request.id
+
+
+def no_answer(request: CleaningRequest, now: datetime) -> bool:
+    if request.arrival_response not in (None, R.WAITING):
+        return False
+    return as_utc(request.response_deadline) <= now
+
+
+def pause_event(request: CleaningRequest) -> RequestEvent | None:
+    if request.status != S.SUPERVISOR_INTERVENTION:
+        return None
+    return next(
+        event
+        for event in reversed(request.events)
+        if event.new_state == S.SUPERVISOR_INTERVENTION
+        and event.old_state != S.SUPERVISOR_INTERVENTION
+    )

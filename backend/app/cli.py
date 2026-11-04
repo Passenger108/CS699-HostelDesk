@@ -169,6 +169,7 @@ def register_cli(app: Flask) -> None:
     def run_timers_command():
         result = run_due()
         click.echo(f"Offers timed out: {result['offers_timed_out']}")
+        click.echo(f"Door waits closed: {result['arrivals_closed']}")
         click.echo(f"Location reminders sent: {result['locations_reminded']}")
         click.echo(f"Weekly credits: {_summary_text(result['weekly_credits'])}")
 

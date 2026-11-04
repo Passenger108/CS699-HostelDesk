@@ -51,6 +51,20 @@ TEMPLATES = {
         "You are off duty",
         "{count} of your tasks went back to the supervisor.",
     ),
+    "WORKER_EN_ROUTE": ("Worker on the way", "{worker} is on the way to room {room}."),
+    "WORKER_ARRIVED": (
+        "Worker at your door",
+        "{worker} is at room {room}. Answer within {minutes} minutes: come in, wait or cancel.",
+    ),
+    "COME_IN": ("You can go in", "The student in room {room} said come in."),
+    "WAIT_REQUESTED": ("Please wait", "The student in room {room} asked you to wait 5 minutes."),
+    "WAIT_ACCEPTED": ("Worker will wait", "The worker will wait {minutes} more minutes."),
+    "NEEDS_SUPERVISOR": ("Supervisor needed", "Room {room} needs the supervisor: {reason}"),
+    "STUDENT_UNAVAILABLE": (
+        "No answer at the door",
+        "Nobody answered at room {room}, so the request was closed.",
+    ),
+    "WORK_RESUMED": ("Work continues", "The supervisor let work on room {room} go on: {reason}"),
     "REQUEST_CANCELLED_BY_STUDENT": (
         "Request cancelled",
         "The student in room {room} cancelled their cleaning request.",

@@ -60,6 +60,10 @@ def worker_tasks(worker_id: int) -> list[CleaningRequest]:
     )
 
 
+def on_site(worker_id: int) -> bool:
+    return any(task.status in ON_SITE_STATES for task in worker_tasks(worker_id))
+
+
 def busy_minutes(tasks: list[CleaningRequest], now: datetime) -> int:
     ends = [
         as_utc(task.accepted_at) + timedelta(minutes=task.latest_eta_minutes or 0)
@@ -195,7 +199,7 @@ def request_off_duty(worker: User, now: datetime | None = None) -> User:
     if profile.availability == WorkerAvailability.OFF_DUTY:
         raise fail("ALREADY_OFF_DUTY")
     if profile.off_duty_requested_at is None:
-        if any(task.status in ON_SITE_STATES for task in worker_tasks(worker.id)):
+        if on_site(worker.id):
             raise fail("OFF_DUTY_ON_SITE")
         profile.off_duty_requested_at = now or utcnow()
         record_audit("OFF_DUTY_REQUESTED", "worker", worker.id, actor=worker)
