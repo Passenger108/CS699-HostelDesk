@@ -74,6 +74,31 @@ export interface Offer {
   summary: string;
 }
 
+export interface Door {
+  answer: "COME_IN" | "WAIT_REQUESTED" | "WAITING" | null;
+  label: string;
+  deadline: string;
+  deadline_label: string;
+}
+
+export interface Pause {
+  from: RequestStatus;
+  from_label: string;
+  reason: string | null;
+  by: Person | null;
+}
+
+export type RequestStep =
+  | "en-route"
+  | "arrive"
+  | "accept-wait"
+  | "refuse-wait"
+  | "start"
+  | "student-unavailable"
+  | "problem"
+  | "arrival-response"
+  | "resolve-intervention";
+
 export interface CleaningRequest extends RequestSummary {
   urgent_reason: string | null;
   note: string | null;
@@ -82,6 +107,8 @@ export interface CleaningRequest extends RequestSummary {
   actions: string[];
   offer: Offer | null;
   timeline: RequestEvent[];
+  door: Door | null;
+  pause: Pause | null;
 }
 
 export interface NewCleaningRequest {
