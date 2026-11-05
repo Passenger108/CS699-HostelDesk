@@ -11,21 +11,18 @@ from app.cleaning.models import (
     CreditReservation,
     OfferStatus,
     Priority,
-    RequestEvent,
     RequestStatus,
 )
 from app.cleaning.recommendations import recommend
+from app.cleaning.schemas import SUPERVISOR_ROLES, iso, request_summary
 from app.cleaning.workflow import (
     ACTIVE_STATES,
-    EVENT_LABELS,
     OFFERABLE,
     ON_SITE_STATES,
     REASSIGNABLE,
-    STATUS_LABELS,
     STUDENT_CANCELLABLE,
     SUPERVISOR_CANCELLABLE,
     SUPERVISOR_CHANGEABLE,
-    is_terminal,
     record_event,
     stale,
     transition,
@@ -33,14 +30,14 @@ from app.cleaning.workflow import (
 from app.common.audit import record_audit, record_security_event
 from app.common.errors import ApiError, clean_text, fail
 from app.common.models import as_utc, utcnow
-from app.common.time import HOSTEL_TZ, clock, hostel_now
+from app.common.time import HOSTEL_TZ, hostel_now
 from app.credits.service import balance, release_credit, reserve_credit
 from app.extensions import db
 from app.hostel_structure.models import Floor, Room, Wing
-from app.hostel_structure.service import room_dict
+from app.hostel_structure.schemas import room_dict
 from app.notifications.service import notify, notify_supervisors
 from app.users.models import Role, User, WorkerAvailability
-from app.workers.service import get_worker, worker_dict, worker_tasks
+from app.workers.service import get_worker, worker_tasks
 
 KEY_LIMIT = 64
 DEFAULT_PAGE_SIZE = 20
@@ -48,7 +45,6 @@ MAX_PAGE_SIZE = 100
 OFFER_MINUTES = 5
 ETA_STEP, ETA_MAX = 5, 120
 S = RequestStatus
-SUPERVISOR_ROLES = (Role.SUPERVISOR, Role.SUPER_ADMIN)
 PRIORITY_ORDER = {Priority.EMERGENCY: 0, Priority.URGENT: 1, Priority.NORMAL: 2}
 FAILED_STATES = frozenset(
     {S.STUDENT_UNAVAILABLE, S.EXPIRED, S.CANCELLED_BY_SUPERVISOR, S.CLOSED_UNSATISFACTORY}
@@ -330,7 +326,7 @@ def approve_request(request: CleaningRequest, supervisor: User) -> CleaningReque
 
 def _plain(value):
     if isinstance(value, datetime):
-        return _iso(value)
+        return iso(value)
     return value.value if isinstance(value, Enum) else value
 
 
@@ -469,17 +465,6 @@ def get_offer_for(offer_id: int, worker: User) -> AssignmentOffer:
     return offer
 
 
-def worker_offers(worker: User) -> list[dict]:
-    offers = db.session.scalars(
-        db.select(AssignmentOffer)
-        .filter_by(worker_id=worker.id, status=OfferStatus.PENDING)
-        .order_by(AssignmentOffer.id)
-    )
-    return [
-        {**offer_dict(offer), "request": request_dict(offer.request, worker)} for offer in offers
-    ]
-
-
 def _check_open(offer: AssignmentOffer, now: datetime) -> None:
     if offer.status != OfferStatus.PENDING or offer.request.status != S.OFFERED:
         raise fail("OFFER_CLOSED")
@@ -612,7 +597,7 @@ def _take_back(request: CleaningRequest, actor: User, event: str, reason: str, k
     notify(request.student, "WORKER_CHANGED", _notification_payload(request))
 
 
-def reorder_queue(worker: User, actor: User, order) -> list[dict]:
+def reorder_queue(worker: User, actor: User, order) -> User:
     tasks = {task.id: task for task in worker_tasks(worker.id) if task.status == S.ACCEPTED_QUEUED}
     if type(order) is not list or any(type(item) is not int for item in order):
         raise fail("BAD_QUEUE", "order")
@@ -629,7 +614,7 @@ def reorder_queue(worker: User, actor: User, order) -> list[dict]:
     except StaleDataError:
         db.session.rollback()
         raise fail("QUEUE_CHANGED") from None
-    return worker_dict(worker)["tasks"]
+    return worker
 
 
 def approve_off_duty(worker_id, supervisor: User) -> User:
@@ -657,20 +642,6 @@ def approve_off_duty(worker_id, supervisor: User) -> User:
         db.session.rollback()
         raise fail("QUEUE_CHANGED") from None
     return worker
-
-
-def offer_dict(offer: AssignmentOffer | None) -> dict | None:
-    if offer is None:
-        return None
-    return {
-        "id": offer.id,
-        "worker": _person(offer.worker),
-        "status": offer.status.value,
-        "response_deadline": _iso(offer.response_deadline),
-        "explanation": offer.explanation,
-        "summary": f"Offered to {offer.worker.name} until {clock(offer.response_deadline)}. "
-        f"{offer.explanation}",
-    }
 
 
 def _notification_payload(request: CleaningRequest) -> dict:
@@ -705,58 +676,6 @@ def get_request_for(request_id: int, viewer: User) -> CleaningRequest:
     if request is None:
         raise fail("REQUEST_NOT_FOUND")
     return request
-
-
-def allowed_actions(request: CleaningRequest, viewer: User) -> list[str]:
-    if viewer.role in SUPERVISOR_ROLES:
-        checks = {
-            "approve": request.status == S.SUBMITTED,
-            "change": request.status in SUPERVISOR_CHANGEABLE,
-            "offer": request.status in OFFERABLE,
-            "reassign": request.status in REASSIGNABLE,
-            "cancel": request.status in SUPERVISOR_CANCELLABLE,
-        }
-    else:
-        checks = {
-            "cancel": viewer.id == request.student_id and request.status in STUDENT_CANCELLABLE
-        }
-    return [action for action, allowed in checks.items() if allowed]
-
-
-def _iso(value: datetime | None) -> str | None:
-    value = as_utc(value)
-    return value.isoformat() if value else None
-
-
-def _person(user: User | None) -> dict | None:
-    if user is None:
-        return None
-    return {"id": user.id, "name": user.name, "role": user.role.value}
-
-
-def event_dict(event: RequestEvent) -> dict:
-    return {
-        "id": event.id,
-        "event_type": event.event_type,
-        "label": EVENT_LABELS.get(event.event_type, STATUS_LABELS[event.new_state]),
-        "old_state": event.old_state.value if event.old_state else None,
-        "new_state": event.new_state.value,
-        "actor": _person(event.actor),
-        "occurred_at": _iso(event.occurred_at),
-    }
-
-
-def request_dict(request: CleaningRequest, viewer: User) -> dict:
-    return {
-        **request_summary(request),
-        "urgent_reason": request.urgent_reason,
-        "note": request.note,
-        "contact_phone": request.contact_phone,
-        "lock_version": request.lock_version,
-        "actions": allowed_actions(request, viewer),
-        "offer": offer_dict(request.offers[-1] if request.offers else None),
-        "timeline": [event_dict(event) for event in request.events],
-    }
 
 
 def _enum_list(value: str | None, enum_type, label: str) -> list:
@@ -830,51 +749,6 @@ def list_requests(
     }
 
 
-def request_summary(request: CleaningRequest) -> dict:
-    return {
-        "id": request.id,
-        "status": request.status.value,
-        "status_label": STATUS_LABELS[request.status],
-        "is_active": not is_terminal(request.status),
-        "priority": request.priority.value,
-        "room": request.room_snapshot,
-        "availability": {
-            "mode": request.availability_mode.value,
-            "label": availability_label(request, utcnow()),
-            "window_start": _iso(request.window_start),
-            "window_end": _iso(request.window_end),
-            "available_until": _iso(request.available_until),
-        },
-        "credit_reservation": request.credit_reservation.value,
-        "student": _person(request.student),
-        "assigned_worker": _person(request.assigned_worker),
-        "accepted_at": _iso(request.accepted_at),
-        "latest_eta_minutes": request.latest_eta_minutes,
-        "eta_label": _eta_label(request),
-        "created_at": _iso(request.created_at),
-        "closed_at": _iso(request.closed_at),
-        "resolution_reason": request.resolution_reason,
-    }
-
-
-def _eta_label(request: CleaningRequest) -> str | None:
-    if request.status not in (S.ACCEPTED_QUEUED, S.EN_ROUTE):
-        return None
-    due = as_utc(request.accepted_at) + timedelta(minutes=request.latest_eta_minutes)
-    return f"{request.assigned_worker.name}, expected by {clock(due)}"
-
-
-def availability_label(request: CleaningRequest, now: datetime) -> str:
-    day = hostel_now(as_utc(request.available_until)).date()
-    today = day == hostel_now(now).date()
-    if request.availability_mode == AvailabilityMode.TIME_WINDOW:
-        window = f"{clock(request.window_start)} to {clock(request.window_end)}"
-        return f"{'Today' if today else f'{day.day} {day:%b}'}, {window}"
-    if request.availability_mode == AvailabilityMode.AVAILABLE_NOW:
-        return "Available now" if today else f"Available on {day.day} {day:%b}"
-    return "Any time today" if today else f"Any time on {day.day} {day:%b}"
-
-
 def _is_delayed(request: CleaningRequest, now: datetime) -> bool:
     if request.status not in (S.ACCEPTED_QUEUED, S.EN_ROUTE):
         return False
@@ -927,7 +801,7 @@ def operations_board(now: datetime | None = None) -> dict:
         if key:
             grouped[key].append(request_summary(row))
     return {
-        "generated_at": _iso(now),
+        "generated_at": iso(now),
         "groups": [
             {"key": key, "label": label, "requests": grouped[key]}
             for key, label in BOARD_GROUPS.items()

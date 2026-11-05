@@ -2,25 +2,22 @@ from flask import Blueprint, jsonify
 
 from app.auth.guards import current_user, roles_required
 from app.cleaning.routes import json_body
+from app.cleaning.schemas import SUPERVISOR_ROLES, request_dict, worker_offers
 from app.cleaning.service import (
-    SUPERVISOR_ROLES,
     accept_offer,
     approve_off_duty,
     decline_offer,
     get_offer_for,
     reorder_queue,
-    request_dict,
-    worker_offers,
 )
 from app.users.models import Role
+from app.workers.schemas import list_workers, worker_dict
 from app.workers.service import (
     correct_location,
     get_worker,
-    list_workers,
     request_off_duty,
     return_to_duty,
     update_location,
-    worker_dict,
 )
 
 bp = Blueprint("workers", __name__, url_prefix="/workers")
@@ -53,14 +50,15 @@ def correct(worker_id: int):
 @roles_required(Role.WORKER)
 def my_queue():
     worker = current_user()
-    return jsonify({"tasks": reorder_queue(worker, worker, json_body().get("order"))})
+    reorder_queue(worker, worker, json_body().get("order"))
+    return jsonify({"tasks": worker_dict(worker)["tasks"]})
 
 
 @bp.put("/<int:worker_id>/queue")
 @roles_required(*SUPERVISOR_ROLES)
 def queue(worker_id: int):
-    order = json_body().get("order")
-    return jsonify({"tasks": reorder_queue(get_worker(worker_id), current_user(), order)})
+    worker = reorder_queue(get_worker(worker_id), current_user(), json_body().get("order"))
+    return jsonify({"tasks": worker_dict(worker)["tasks"]})
 
 
 @bp.post("/me/off-duty-request")

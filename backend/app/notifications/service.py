@@ -2,7 +2,7 @@ from datetime import datetime
 
 from app.common.audit import record_security_event
 from app.common.errors import fail
-from app.common.models import as_utc, utcnow
+from app.common.models import utcnow
 from app.extensions import db
 from app.notifications.models import Notification
 from app.users.models import AccountStatus, Role, User
@@ -145,24 +145,3 @@ def set_read(notification: Notification, read: bool, now: datetime | None = None
         notification.read_at = None
     db.session.commit()
     return notification
-
-
-def notification_dict(notification: Notification) -> dict:
-    title, body = TEMPLATES[notification.type]
-    payload = notification.payload_json or {}
-    read_at = as_utc(notification.read_at)
-    return {
-        "id": notification.id,
-        "type": notification.type,
-        "title": title,
-        "body": body.format_map(_Defaults(payload)),
-        "request_id": payload.get("request_id"),
-        "is_read": read_at is not None,
-        "read_at": read_at.isoformat() if read_at else None,
-        "created_at": as_utc(notification.created_at).isoformat(),
-    }
-
-
-class _Defaults(dict):
-    def __missing__(self, key: str) -> str:
-        return ""
