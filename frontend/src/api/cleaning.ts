@@ -5,6 +5,7 @@ import type {
   RequestFilters,
   RequestChange,
   RequestPage,
+  RequestStep,
 } from "../types/cleaning";
 import { apiFetch } from "./client";
 
@@ -33,6 +34,16 @@ export const takeBackRequest = (
   apiFetch<RequestResponse>(`/cleaning/requests/${id}/reassign`, {
     method: "POST",
     body: JSON.stringify(body),
+  });
+
+export const requestStep = (
+  id: number,
+  step: RequestStep,
+  body?: Record<string, string | number>,
+) =>
+  apiFetch<RequestResponse>(`/cleaning/requests/${id}/${step}`, {
+    method: "POST",
+    body: body && JSON.stringify(body),
   });
 
 export function requestListPath(filters: RequestFilters = {}): string {

@@ -1,9 +1,20 @@
 from flask import Blueprint, jsonify, request
 
 from app.auth.guards import current_user, login_required, roles_required
+from app.cleaning.arrival import (
+    accept_wait,
+    answer_door,
+    arrive,
+    mark_unavailable,
+    refuse_wait,
+    report_problem,
+    resolve_intervention,
+    set_off,
+    start_cleaning,
+)
 from app.cleaning.recommendations import recommend
+from app.cleaning.schemas import SUPERVISOR_ROLES, request_dict
 from app.cleaning.service import (
-    SUPERVISOR_ROLES,
     active_request,
     approve_request,
     cancel_request,
@@ -13,7 +24,6 @@ from app.cleaning.service import (
     offer_request,
     operations_board,
     reassign_request,
-    request_dict,
     submit_request,
 )
 from app.common.errors import ApiError
@@ -30,6 +40,19 @@ TEXT_FIELDS = (
     "urgent_reason",
     "client_key",
     "reason",
+    "answer",
+    "decision",
+)
+WORKER_STEPS = {
+    "en-route": set_off,
+    "arrive": arrive,
+    "accept-wait": accept_wait,
+    "refuse-wait": refuse_wait,
+    "start": start_cleaning,
+    "student-unavailable": mark_unavailable,
+}
+STEP_PATH = "/requests/<int:request_id>/<any({}):step>".format(
+    ", ".join(f"'{step}'" for step in WORKER_STEPS)
 )
 
 
@@ -166,3 +189,44 @@ def reassign(request_id: int):
 @roles_required(*SUPERVISOR_ROLES)
 def board():
     return jsonify(operations_board())
+
+
+@bp.post(STEP_PATH)
+@roles_required(Role.WORKER)
+def worker_step(request_id: int, step: str):
+    worker = current_user()
+    cleaning_request = WORKER_STEPS[step](get_request_for(request_id, worker), worker)
+    return jsonify({"request": request_dict(cleaning_request, worker)})
+
+
+@bp.post("/requests/<int:request_id>/problem")
+@roles_required(Role.WORKER)
+def problem(request_id: int):
+    worker = current_user()
+    reason = json_body().get("reason")
+    cleaning_request = report_problem(get_request_for(request_id, worker), worker, reason)
+    return jsonify({"request": request_dict(cleaning_request, worker)})
+
+
+@bp.post("/requests/<int:request_id>/arrival-response")
+@roles_required(Role.STUDENT)
+def arrival_response(request_id: int):
+    student = current_user()
+    answer = json_body().get("answer")
+    cleaning_request = answer_door(get_request_for(request_id, student), student, answer)
+    return jsonify({"request": request_dict(cleaning_request, student)})
+
+
+@bp.post("/requests/<int:request_id>/resolve-intervention")
+@roles_required(*SUPERVISOR_ROLES)
+def resolve(request_id: int):
+    body = json_body()
+    supervisor = current_user()
+    cleaning_request = resolve_intervention(
+        get_request_for(request_id, supervisor),
+        supervisor,
+        body.get("decision"),
+        body.get("reason"),
+        body.get("lock_version"),
+    )
+    return jsonify({"request": request_dict(cleaning_request, supervisor)})

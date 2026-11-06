@@ -1,6 +1,6 @@
-from app.hostel_structure.service import room_dict
+from app.hostel_structure.schemas import room_dict
 from app.users.models import Role, User
-from app.workers.service import worker_dict
+from app.workers.schemas import worker_dict
 
 
 def profile_dict(user: User, viewer: User | None = None) -> dict | None:

@@ -2,10 +2,10 @@ from flask import Blueprint, jsonify, request
 
 from app.auth.guards import current_user, login_required
 from app.common.errors import ApiError
+from app.notifications.schemas import notification_dict
 from app.notifications.service import (
     get_own_notification,
     list_notifications,
-    notification_dict,
     set_read,
     unread_count,
 )

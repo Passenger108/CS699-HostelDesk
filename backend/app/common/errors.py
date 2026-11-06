@@ -86,6 +86,25 @@ ERRORS = {
     "ALREADY_OFF_DUTY": (409, "You are already off duty."),
     "OFF_DUTY_ON_SITE": (409, "Finish your current task before going off duty."),
     "NO_OFF_DUTY_REQUEST": (409, "This worker has not asked to go off duty."),
+    "WRONG_STEP": (409, "This step is not possible now. The task is {status}."),
+    "TOO_EARLY": (409, "It is too early for this step. You can do it from {time}."),
+    "ANOTHER_TASK_ACTIVE": (409, "Finish your current task first."),
+    "NOT_NEXT_TASK": (409, "Room {room} is first in your queue. Do it first or move this task up."),
+    "BAD_ANSWER": (400, "answer must be COME_IN, WAIT or CANCEL.", "INVALID_FIELD"),
+    "RESPONSE_CLOSED": (409, "The time to answer at the door has run out."),
+    "WAIT_USED": (409, "Waiting can be asked only once, as the first answer."),
+    "NO_WAIT_ASKED": (409, "The student has not asked you to wait."),
+    "NOT_LET_IN": (409, "Wait until the student says Come in."),
+    "STUDENT_ANSWERED": (409, "The student has answered, so this cannot be closed as no answer."),
+    "STILL_WAITING": (409, "The student can still answer until {time}."),
+    "PROBLEM_REASON": (400, "Describe the problem.", "REASON_REQUIRED"),
+    "RESOLVE_REASON": (400, "Give a reason for your decision.", "REASON_REQUIRED"),
+    "BAD_DECISION": (400, "decision must be resume or reassign.", "INVALID_FIELD"),
+    "WORKER_AT_OTHER_ROOM": (409, "This worker is busy at another room. Try again later."),
+    "CLEANING_STARTED": (
+        409,
+        "Cleaning has started, so it cannot go to another worker. Let it continue or cancel it.",
+    ),
 }
 
 

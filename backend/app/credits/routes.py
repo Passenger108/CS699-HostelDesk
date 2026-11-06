@@ -1,7 +1,8 @@
 from flask import Blueprint, jsonify
 
 from app.auth.guards import current_user, roles_required
-from app.credits.service import balance, history
+from app.credits.schemas import history
+from app.credits.service import balance
 from app.users.models import Role
 
 bp = Blueprint("credits", __name__)

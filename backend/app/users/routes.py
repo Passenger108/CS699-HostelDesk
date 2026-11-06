@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify
 
 from app.auth.guards import current_user, login_required
-from app.users.service import profile_dict
+from app.users.schemas import profile_dict
 
 bp = Blueprint("users", __name__)
 

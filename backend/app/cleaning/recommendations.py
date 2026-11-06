@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from app.cleaning.models import CleaningRequest, OfferStatus
-from app.workers.service import list_workers
+from app.workers.schemas import list_workers
 
 NEARBY_FLOORS = 2
 SOON_MINUTES = 10
