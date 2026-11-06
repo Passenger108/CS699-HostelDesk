@@ -10,6 +10,7 @@ import { SupervisorActions } from "../operations/SupervisorActions";
 import { PRIORITY_LABELS } from "./labels";
 import { RequestTimeline } from "./RequestTimeline";
 import { StatusChip } from "./StatusChip";
+import { TaskSteps } from "./TaskSteps";
 
 function CancelControl({ request }: { request: CleaningRequest }) {
   const queryClient = useQueryClient();
@@ -133,6 +134,7 @@ export function RequestDetails({ request }: { request: CleaningRequest }) {
       {request.note && <p className="request-card__note">“{request.note}”</p>}
       <h3>Timeline</h3>
       <RequestTimeline events={request.timeline} />
+      <TaskSteps request={request} />
       {request.actions.includes("cancel") && (
         <CancelControl request={request} />
       )}

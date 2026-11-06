@@ -13,6 +13,7 @@ export function RequestDetailPage() {
     queryKey: ["cleaning", "request", id],
     queryFn: () => fetchRequest(id),
     enabled: valid,
+    refetchInterval: 10_000,
   });
 
   if (!valid) return <NotFoundPage />;
