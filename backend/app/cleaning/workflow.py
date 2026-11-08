@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from app.cleaning.models import ArrivalResponse as R
@@ -73,7 +73,7 @@ ALLOWED_TRANSITIONS: dict[RequestStatus, frozenset[RequestStatus]] = {
         }
     ),
     S.AWAITING_STUDENT_RESCHEDULE: frozenset(
-        {S.AWAITING_ASSIGNMENT, S.CANCELLED_BY_STUDENT, S.EXPIRED}
+        {S.SUBMITTED, S.AWAITING_ASSIGNMENT, S.CANCELLED_BY_STUDENT, S.EXPIRED}
     ),
     S.EN_ROUTE: frozenset(
         {
@@ -132,6 +132,8 @@ SUPERVISOR_CANCELLABLE = (STUDENT_CANCELLABLE | ON_SITE_STATES | {S.SUPERVISOR_I
     S.AWAITING_STUDENT_RESCHEDULE
 }
 OFFERABLE = frozenset({S.AWAITING_ASSIGNMENT, S.AWAITING_REASSIGNMENT})
+DELAY_STATES = frozenset({S.ACCEPTED_QUEUED, S.EN_ROUTE})
+PRE_TRAVEL = SUPERVISOR_CHANGEABLE | {S.OFFERED, S.ACCEPTED_QUEUED}
 
 STATUS_LABELS: dict[RequestStatus, str] = {
     S.SUBMITTED: "Waiting for supervisor approval",
@@ -174,6 +176,12 @@ EVENT_LABELS: dict[str, str] = {
     "PROBLEM_REPORTED": "The worker reported a problem",
     "STARTED": "Cleaning started",
     "RESUMED": "The supervisor let the work continue",
+    "ETA_UPDATED": "The worker changed the arrival time",
+    "DELAY_FLAGGED": "The student said the worker is late",
+    "DELAY_ESCALATED": "The delay went to the supervisor",
+    "DELAY_RESOLVED": "The supervisor dealt with the delay",
+    "WINDOW_MISSED": "The time window ended before the worker came",
+    "RESCHEDULED": "The student chose a new time",
 }
 
 
@@ -253,3 +261,23 @@ def pause_event(request: CleaningRequest) -> RequestEvent | None:
         if event.new_state == S.SUPERVISOR_INTERVENTION
         and event.old_state != S.SUPERVISOR_INTERVENTION
     )
+
+
+def late_after(request: CleaningRequest, times: int = 1) -> datetime:
+    return as_utc(request.accepted_at) + timedelta(minutes=request.original_eta_minutes * times)
+
+
+def delay_state(request: CleaningRequest, now: datetime) -> str | None:
+    if request.status not in DELAY_STATES or request.accepted_at is None:
+        return None
+    return request.delay_state or ("DUE" if late_after(request) <= now else "NOT_DUE")
+
+
+def sweep(query, act) -> int:
+    done = 0
+    for row in db.session.scalars(query).all():
+        try:
+            done += bool(act(row))
+        except ApiError:
+            db.session.rollback()
+    return done

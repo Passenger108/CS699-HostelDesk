@@ -5,6 +5,7 @@ from datetime import datetime
 from flask import Flask
 
 from app.cleaning.arrival import time_out_arrivals
+from app.cleaning.delays import escalate_delays, expire_requests, miss_windows
 from app.cleaning.service import time_out_offers
 from app.common.models import utcnow
 from app.common.time import week_start
@@ -22,6 +23,9 @@ def run_due(now: datetime | None = None) -> dict:
     result = {
         "offers_timed_out": time_out_offers(now),
         "arrivals_closed": time_out_arrivals(now),
+        "delays_escalated": escalate_delays(now),
+        "windows_missed": miss_windows(now),
+        "requests_expired": expire_requests(now),
         "locations_reminded": remind_stale_locations(now),
         "weekly_credits": None,
     }

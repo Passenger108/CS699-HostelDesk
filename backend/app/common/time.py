@@ -14,6 +14,11 @@ def clock(value: datetime) -> str:
     return f"{local.hour % 12 or 12}:{local:%M} {'am' if local.hour < 12 else 'pm'}"
 
 
+def day_clock(value: datetime) -> str:
+    local = hostel_now(as_utc(value))
+    return f"{clock(value)}, {local.day} {local:%b}"
+
+
 def week_start(now: datetime | None = None) -> date:
     local = hostel_now(now)
     return local.date() - timedelta(days=local.weekday())

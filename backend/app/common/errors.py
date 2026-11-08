@@ -101,6 +101,9 @@ ERRORS = {
     "RESOLVE_REASON": (400, "Give a reason for your decision.", "REASON_REQUIRED"),
     "BAD_DECISION": (400, "decision must be resume or reassign.", "INVALID_FIELD"),
     "WORKER_AT_OTHER_ROOM": (409, "This worker is busy at another room. Try again later."),
+    "NOT_LATE_YET": (409, "The worker is not late yet. You can report a delay from {time}."),
+    "NO_DELAY": (409, "There is no reported delay to deal with."),
+    "RESCHEDULE_CLOSED": (409, "The time to choose a new time has run out."),
     "CLEANING_STARTED": (
         409,
         "Cleaning has started, so it cannot go to another worker. Let it continue or cancel it.",

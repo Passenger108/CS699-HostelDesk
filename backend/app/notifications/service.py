@@ -65,6 +65,25 @@ TEMPLATES = {
         "Nobody answered at room {room}, so the request was closed.",
     ),
     "WORK_RESUMED": ("Work continues", "The supervisor let work on room {room} go on: {reason}"),
+    "ETA_UPDATED": ("New arrival time", "{worker} now expects to reach room {room} by {time}."),
+    "DELAY_FLAGGED": (
+        "The student says you are late",
+        "Room {room} is waiting. Update your arrival time if it changed.",
+    ),
+    "DELAY_ESCALATED": (
+        "Worker very late",
+        "{worker} is now twice the promised time late for room {room}. Free workers: {workers}.",
+    ),
+    "DELAY_RESOLVED": (
+        "Delay handled",
+        "The supervisor handled the delay for room {room}: {reason}",
+    ),
+    "WINDOW_MISSED": (
+        "Choose a new time",
+        "The time window for room {room} ended before a worker came. Choose a new time by {time}.",
+    ),
+    "RESCHEDULED": ("New time chosen", "Room {room} chose a new time: {when}."),
+    "REQUEST_EXPIRED": ("Request expired", "The request for room {room} expired: {reason}"),
     "REQUEST_CANCELLED_BY_STUDENT": (
         "Request cancelled",
         "The student in room {room} cancelled their cleaning request.",

@@ -23,8 +23,10 @@ from app.cleaning.workflow import (
     STUDENT_CANCELLABLE,
     SUPERVISOR_CANCELLABLE,
     SUPERVISOR_CHANGEABLE,
+    delay_state,
     record_event,
     stale,
+    sweep,
     transition,
 )
 from app.common.audit import record_audit, record_security_event
@@ -252,12 +254,8 @@ def cancel_request(request: CleaningRequest, actor: User, reason=None) -> Cleani
 
     old_state = request.status
     try:
-        if request.credit_reservation == CreditReservation.RESERVED:
-            who = "student" if by_student else "supervisor"
-            release_credit(
-                request.student, request.id, f"Request cancelled by the {who}", actor=actor
-            )
-            request.credit_reservation = CreditReservation.RELEASED
+        who = "student" if by_student else "supervisor"
+        release(request, f"Request cancelled by the {who}", actor)
         request.resolution_reason = reason
         _withdraw_offers(request)
         transition(request, status, actor=actor, payload=None if by_student else {"reason": reason})
@@ -288,6 +286,12 @@ def cancel_request(request: CleaningRequest, actor: User, reason=None) -> Cleani
         db.session.rollback()
         return _settled(request.id, lambda latest: latest.status == status)
     return request
+
+
+def release(request: CleaningRequest, reason: str, actor: User | None = None) -> None:
+    if request.credit_reservation == CreditReservation.RESERVED:
+        release_credit(request.student, request.id, reason, actor=actor)
+        request.credit_reservation = CreditReservation.RELEASED
 
 
 def _settled(request_id: int, done) -> CleaningRequest:
@@ -472,6 +476,12 @@ def _check_open(offer: AssignmentOffer, now: datetime) -> None:
         raise fail("OFFER_EXPIRED")
 
 
+def check_eta(eta_minutes) -> int:
+    if type(eta_minutes) is not int or not 0 < eta_minutes <= ETA_MAX or eta_minutes % ETA_STEP:
+        raise fail("BAD_ETA", "eta_minutes")
+    return eta_minutes
+
+
 def accept_offer(
     offer: AssignmentOffer, worker: User, eta_minutes, now: datetime | None = None
 ) -> CleaningRequest:
@@ -479,8 +489,7 @@ def accept_offer(
     request = offer.request
     if offer.status == OfferStatus.ACCEPTED:
         return request
-    if type(eta_minutes) is not int or not 0 < eta_minutes <= ETA_MAX or eta_minutes % ETA_STEP:
-        raise fail("BAD_ETA", "eta_minutes")
+    check_eta(eta_minutes)
     _check_open(offer, now)
     try:
         offer.status = OfferStatus.ACCEPTED
@@ -538,18 +547,13 @@ def decline_offer(
 
 def time_out_offers(now: datetime | None = None) -> int:
     now = now or utcnow()
-    timed_out = 0
-    pending = db.select(AssignmentOffer.id).filter_by(status=OfferStatus.PENDING)
-    for offer_id in db.session.scalars(pending).all():
-        offer = db.session.get(AssignmentOffer, offer_id)
-        if offer.status != OfferStatus.PENDING or as_utc(offer.response_deadline) > now:
-            continue
-        try:
-            _end_offer(offer, OfferStatus.TIMED_OUT, None, "NO_RESPONSE")
-            timed_out += 1
-        except ApiError:
-            db.session.rollback()
-    return timed_out
+    pending = db.select(AssignmentOffer).filter_by(status=OfferStatus.PENDING)
+    return sweep(
+        pending,
+        lambda offer: offer.status == OfferStatus.PENDING
+        and as_utc(offer.response_deadline) <= now
+        and _end_offer(offer, OfferStatus.TIMED_OUT, None, "NO_RESPONSE"),
+    )
 
 
 def reassign_request(
@@ -585,11 +589,16 @@ def reassign_request(
     return offer_request(request, supervisor, worker_id, request.lock_version, now)
 
 
-def _take_back(request: CleaningRequest, actor: User, event: str, reason: str, keep=False) -> None:
+def drop_worker(request: CleaningRequest) -> User | None:
     worker = request.assigned_worker
-    _withdraw_offers(request, not keep)
-    if not keep:
-        request.assigned_worker = request.accepted_at = request.latest_eta_minutes = None
+    _withdraw_offers(request, accepted=True)
+    request.assigned_worker = request.accepted_at = request.latest_eta_minutes = None
+    request.queue_position = request.delay_state = None
+    return worker
+
+
+def _take_back(request: CleaningRequest, actor: User, event: str, reason: str, keep=False) -> None:
+    worker = request.assigned_worker if keep else drop_worker(request)
     payload = {"worker_id": worker.id, "reason": reason}
     target = S.SUPERVISOR_INTERVENTION if keep else S.AWAITING_REASSIGNMENT
     transition(request, target, actor=actor, event_type=event, payload=payload)
@@ -749,19 +758,11 @@ def list_requests(
     }
 
 
-def _is_delayed(request: CleaningRequest, now: datetime) -> bool:
-    if request.status not in (S.ACCEPTED_QUEUED, S.EN_ROUTE):
-        return False
-    if request.accepted_at is None or request.original_eta_minutes is None:
-        return False
-    return as_utc(request.accepted_at) + timedelta(minutes=request.original_eta_minutes) <= now
-
-
 def board_group(request: CleaningRequest, now: datetime) -> str | None:
     status = request.status
     if status in SUPERVISOR_CHANGEABLE and request.priority != Priority.NORMAL:
         return "urgent"
-    if _is_delayed(request, now):
+    if delay_state(request, now) in ("DUE", "FLAGGED", "ESCALATED"):
         return "delayed"
     groups = {
         "new": {S.SUBMITTED},

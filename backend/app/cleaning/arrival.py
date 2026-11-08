@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from sqlalchemy.orm.exc import StaleDataError
 
 from app.cleaning.models import ArrivalResponse as R
-from app.cleaning.models import AvailabilityMode, CleaningRequest, CreditReservation
+from app.cleaning.models import AvailabilityMode, CleaningRequest
 from app.cleaning.models import RequestStatus as S
 from app.cleaning.service import (
     _free_worker,
@@ -11,6 +11,7 @@ from app.cleaning.service import (
     _settled,
     _take_back,
     cancel_request,
+    release,
 )
 from app.cleaning.workflow import (
     ON_SITE_STATES,
@@ -19,13 +20,13 @@ from app.cleaning.workflow import (
     pause_event,
     record_event,
     stale,
+    sweep,
     transition,
 )
 from app.common.audit import record_audit
-from app.common.errors import ApiError, clean_text, fail
+from app.common.errors import clean_text, fail
 from app.common.models import as_utc, utcnow
 from app.common.time import clock
-from app.credits.service import release_credit
 from app.extensions import db
 from app.notifications.service import notify, notify_supervisors
 from app.users.models import User, WorkerAvailability
@@ -201,9 +202,7 @@ def mark_unavailable(request: CleaningRequest, worker=None, now: datetime | None
 
     def work():
         reason = "The student did not answer at the door."
-        if request.credit_reservation == CreditReservation.RESERVED:
-            release_credit(request.student, request.id, reason, actor=worker)
-            request.credit_reservation = CreditReservation.RELEASED
+        release(request, reason, worker)
         request.resolution_reason = reason
         transition(request, S.STUDENT_UNAVAILABLE, actor=worker)
         _free_worker(request.assigned_worker)
@@ -216,17 +215,10 @@ def mark_unavailable(request: CleaningRequest, worker=None, now: datetime | None
 
 def time_out_arrivals(now: datetime | None = None) -> int:
     now = now or utcnow()
-    closed = 0
     arrived = db.select(CleaningRequest).filter_by(status=S.ARRIVED)
-    for request in db.session.scalars(arrived).all():
-        if not no_answer(request, now):
-            continue
-        try:
-            mark_unavailable(request, None, now)
-            closed += 1
-        except ApiError:
-            db.session.rollback()
-    return closed
+    return sweep(
+        arrived, lambda request: no_answer(request, now) and mark_unavailable(request, None, now)
+    )
 
 
 def resolve_intervention(
