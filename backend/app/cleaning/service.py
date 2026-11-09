@@ -16,14 +16,12 @@ from app.cleaning.models import (
 from app.cleaning.recommendations import recommend
 from app.cleaning.schemas import SUPERVISOR_ROLES, iso, request_summary
 from app.cleaning.workflow import (
-    ACTIVE_STATES,
     OFFERABLE,
     ON_SITE_STATES,
     REASSIGNABLE,
     STUDENT_CANCELLABLE,
     SUPERVISOR_CANCELLABLE,
     SUPERVISOR_CHANGEABLE,
-    delay_state,
     record_event,
     stale,
     sweep,
@@ -47,20 +45,6 @@ MAX_PAGE_SIZE = 100
 OFFER_MINUTES = 5
 ETA_STEP, ETA_MAX = 5, 120
 S = RequestStatus
-PRIORITY_ORDER = {Priority.EMERGENCY: 0, Priority.URGENT: 1, Priority.NORMAL: 2}
-FAILED_STATES = frozenset(
-    {S.STUDENT_UNAVAILABLE, S.EXPIRED, S.CANCELLED_BY_SUPERVISOR, S.CLOSED_UNSATISFACTORY}
-)
-BOARD_GROUPS = {
-    "urgent": "Urgent and emergency",
-    "new": "New, waiting for approval",
-    "awaiting_assignment": "Waiting for a worker",
-    "offered": "Offered to a worker",
-    "active": "Active",
-    "delayed": "Delayed",
-    "disputed": "Disputed or needs a decision",
-    "failed": "Failed or unavailable today",
-}
 
 
 def _parse_time(value: str | None, label: str, field: str) -> time:
@@ -70,13 +54,9 @@ def _parse_time(value: str | None, label: str, field: str) -> time:
         raise fail("BAD_TIME", field, label=label) from None
 
 
-def _today_at(now: datetime, at: time) -> datetime:
-    local = hostel_now(now)
-    return datetime.combine(local.date(), at, tzinfo=HOSTEL_TZ).astimezone(timezone.utc)
-
-
 def end_of_day(now: datetime) -> datetime:
-    return _today_at(now, time(23, 59, 59))
+    end = datetime.combine(hostel_now(now).date(), time(23, 59, 59), tzinfo=HOSTEL_TZ)
+    return end.astimezone(timezone.utc)
 
 
 def availability_from(
@@ -755,56 +735,4 @@ def list_requests(
         "page": page_number,
         "per_page": size,
         "total": total,
-    }
-
-
-def board_group(request: CleaningRequest, now: datetime) -> str | None:
-    status = request.status
-    if status in SUPERVISOR_CHANGEABLE and request.priority != Priority.NORMAL:
-        return "urgent"
-    if delay_state(request, now) in ("DUE", "FLAGGED", "ESCALATED"):
-        return "delayed"
-    groups = {
-        "new": {S.SUBMITTED},
-        "awaiting_assignment": {
-            S.AWAITING_ASSIGNMENT,
-            S.AWAITING_REASSIGNMENT,
-            S.AWAITING_STUDENT_RESCHEDULE,
-        },
-        "offered": {S.OFFERED},
-        "disputed": {S.DISPUTED, S.SUPERVISOR_INTERVENTION},
-        "failed": FAILED_STATES,
-    }
-    for key, states in groups.items():
-        if status in states:
-            return key
-    return "active" if status in ACTIVE_STATES else None
-
-
-def operations_board(now: datetime | None = None) -> dict:
-    now = now or utcnow()
-    since = _today_at(now, time.min)
-    rows = db.session.scalars(
-        db.select(CleaningRequest).filter(
-            db.or_(
-                CleaningRequest.status.in_(ACTIVE_STATES),
-                db.and_(
-                    CleaningRequest.status.in_(FAILED_STATES),
-                    CleaningRequest.closed_at >= since,
-                ),
-            )
-        )
-    ).all()
-    rows = sorted(rows, key=lambda row: (PRIORITY_ORDER[row.priority], row.id))
-    grouped = {key: [] for key in BOARD_GROUPS}
-    for row in rows:
-        key = board_group(row, now)
-        if key:
-            grouped[key].append(request_summary(row))
-    return {
-        "generated_at": iso(now),
-        "groups": [
-            {"key": key, "label": label, "requests": grouped[key]}
-            for key, label in BOARD_GROUPS.items()
-        ],
     }

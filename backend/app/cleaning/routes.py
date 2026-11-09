@@ -12,8 +12,9 @@ from app.cleaning.arrival import (
     set_off,
     start_cleaning,
 )
+from app.cleaning.delays import flag_delay, reschedule, resolve_delay, update_eta
 from app.cleaning.recommendations import recommend
-from app.cleaning.schemas import SUPERVISOR_ROLES, request_dict
+from app.cleaning.schemas import SUPERVISOR_ROLES, operations_board, request_dict
 from app.cleaning.service import (
     active_request,
     approve_request,
@@ -22,7 +23,6 @@ from app.cleaning.service import (
     get_request_for,
     list_requests,
     offer_request,
-    operations_board,
     reassign_request,
     submit_request,
 )
@@ -230,3 +230,49 @@ def resolve(request_id: int):
         body.get("lock_version"),
     )
     return jsonify({"request": request_dict(cleaning_request, supervisor)})
+
+
+@bp.patch("/requests/<int:request_id>/eta")
+@roles_required(Role.WORKER)
+def eta(request_id: int):
+    worker = current_user()
+    minutes = json_body().get("eta_minutes")
+    cleaning_request = update_eta(get_request_for(request_id, worker), worker, minutes)
+    return jsonify({"request": request_dict(cleaning_request, worker)})
+
+
+@bp.post("/requests/<int:request_id>/flag-delay")
+@roles_required(Role.STUDENT)
+def flag(request_id: int):
+    student = current_user()
+    cleaning_request = flag_delay(get_request_for(request_id, student), student)
+    return jsonify({"request": request_dict(cleaning_request, student)})
+
+
+@bp.post("/requests/<int:request_id>/resolve-delay")
+@roles_required(*SUPERVISOR_ROLES)
+def resolve_late(request_id: int):
+    body = json_body()
+    supervisor = current_user()
+    cleaning_request = resolve_delay(
+        get_request_for(request_id, supervisor),
+        supervisor,
+        body.get("reason"),
+        body.get("lock_version"),
+    )
+    return jsonify({"request": request_dict(cleaning_request, supervisor)})
+
+
+@bp.post("/requests/<int:request_id>/reschedule")
+@roles_required(Role.STUDENT)
+def new_time(request_id: int):
+    body = json_body()
+    student = current_user()
+    cleaning_request = reschedule(
+        get_request_for(request_id, student),
+        student,
+        body.get("availability_mode"),
+        body.get("window_start"),
+        body.get("window_end"),
+    )
+    return jsonify({"request": request_dict(cleaning_request, student)})
