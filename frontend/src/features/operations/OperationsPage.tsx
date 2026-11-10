@@ -5,7 +5,7 @@ import { ErrorMessage } from "../../components/ErrorMessage";
 import type { RequestSummary } from "../../types/cleaning";
 import { RequestDetails } from "../cleaning/ActiveRequestCard";
 import { PRIORITY_LABELS } from "../cleaning/labels";
-import { StatusChip } from "../cleaning/StatusChip";
+import { DelayBadge, StatusChip } from "../cleaning/StatusChip";
 
 function elapsed(now: string, since: string): string {
   const minutes = Math.max(
@@ -30,6 +30,7 @@ function BoardCard({
     <button type="button" className="card board__card" onClick={onOpen}>
       <span className="request-card__head">
         <StatusChip request={row} />
+        <DelayBadge delay={row.delay} />
         {row.priority !== "NORMAL" && (
           <span className="chip">{PRIORITY_LABELS[row.priority]}</span>
         )}
@@ -39,10 +40,8 @@ function BoardCard({
         {row.room.floor_label}, Wing {row.room.wing} · {row.availability.label}
       </span>
       <span className="muted">
-        {row.assigned_worker?.name ?? "No worker"}
-        {row.latest_eta_minutes !== null &&
-          ` · ETA ${row.latest_eta_minutes} min`}{" "}
-        · sent {elapsed(now, row.created_at)} ago
+        {row.eta_label ?? row.assigned_worker?.name ?? "No worker"} · sent{" "}
+        {elapsed(now, row.created_at)} ago
       </span>
     </button>
   );

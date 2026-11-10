@@ -45,7 +45,10 @@ export function HistoryPage() {
               {data.requests.map((row) => (
                 <tr key={row.id}>
                   <td>
-                    <Link to={`/requests/${row.id}`}>
+                    <Link
+                      to={`/requests/${row.id}`}
+                      className="btn btn--ghost btn--small"
+                    >
                       {formatDateTime(row.created_at)}
                     </Link>
                     {row.priority !== "NORMAL" && (

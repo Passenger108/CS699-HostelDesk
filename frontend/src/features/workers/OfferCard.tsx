@@ -5,7 +5,7 @@ import { ErrorMessage } from "../../components/ErrorMessage";
 import type { WorkerOffer } from "../../types/worker";
 import { RequestDetails } from "../cleaning/ActiveRequestCard";
 
-const ETAS = Array.from({ length: 24 }, (_, i) => (i + 1) * 5);
+export const ETAS = Array.from({ length: 24 }, (_, i) => (i + 1) * 5);
 
 function useSecondsLeft(deadline: string) {
   const [now, setNow] = useState(Date.now());

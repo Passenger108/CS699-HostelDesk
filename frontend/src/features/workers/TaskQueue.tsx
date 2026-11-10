@@ -52,8 +52,13 @@ export function TaskQueue({
           return (
             <li key={task.id}>
               <span>
-                <Link to={`/requests/${task.id}`}>Room {task.room}</Link> ·{" "}
-                {task.status} · {task.due_label}
+                <Link
+                  to={`/requests/${task.id}`}
+                  className="btn btn--ghost btn--small"
+                >
+                  Room {task.room}
+                </Link>{" "}
+                · {task.status} · {task.due_label}
                 {task.warning && <span className="error"> {task.warning}</span>}
               </span>
               {task.movable && (

@@ -31,7 +31,11 @@ export function RequestDetailPage() {
         Request {request.id} · {request.student.name}
       </p>
       <RequestDetails request={request} />
-      <Link to="/">Back to Home</Link>
+      <div className="card-footer">
+        <Link to="/" className="btn btn--ghost">
+          Back to Home
+        </Link>
+      </div>
     </section>
   );
 }
