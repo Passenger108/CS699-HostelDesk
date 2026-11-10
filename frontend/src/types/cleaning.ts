@@ -64,6 +64,7 @@ export interface RequestSummary {
   accepted_at: string | null;
   latest_eta_minutes: number | null;
   eta_label: string | null;
+  delay: Delay | null;
   created_at: string;
   closed_at: string | null;
   resolution_reason: string | null;
@@ -88,6 +89,21 @@ export interface Pause {
   by: Person | null;
 }
 
+export interface Delay {
+  state: "NOT_DUE" | "DUE" | "FLAGGED" | "ESCALATED" | "RESOLVED";
+  label: string;
+  expected_at: string;
+  late_from: string;
+  late_from_label: string;
+  escalate_at: string;
+  original_eta_minutes: number;
+}
+
+export interface Reschedule {
+  deadline: string;
+  deadline_label: string;
+}
+
 export type RequestStep =
   | "en-route"
   | "arrive"
@@ -97,7 +113,11 @@ export type RequestStep =
   | "student-unavailable"
   | "problem"
   | "arrival-response"
-  | "resolve-intervention";
+  | "resolve-intervention"
+  | "eta"
+  | "flag-delay"
+  | "resolve-delay"
+  | "reschedule";
 
 export interface CleaningRequest extends RequestSummary {
   urgent_reason: string | null;
@@ -109,6 +129,7 @@ export interface CleaningRequest extends RequestSummary {
   timeline: RequestEvent[];
   door: Door | null;
   pause: Pause | null;
+  reschedule: Reschedule | null;
 }
 
 export interface NewCleaningRequest {

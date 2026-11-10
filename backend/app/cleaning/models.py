@@ -58,6 +58,12 @@ class ArrivalResponse(str, enum.Enum):
     WAITING = "WAITING"
 
 
+class DelayState(str, enum.Enum):
+    FLAGGED = "FLAGGED"
+    ESCALATED = "ESCALATED"
+    RESOLVED = "RESOLVED"
+
+
 class OfferStatus(str, enum.Enum):
     PENDING = "PENDING"
     ACCEPTED = "ACCEPTED"
@@ -103,6 +109,8 @@ class CleaningRequest(IdMixin, TimestampMixin, db.Model):
     queue_position: Mapped[int | None] = mapped_column()
     arrival_response: Mapped[str | None] = mapped_column(String(20))
     response_deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    delay_state: Mapped[str | None] = mapped_column(String(20))
+    reschedule_deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     resolution_reason: Mapped[str | None] = mapped_column(String(500))
     lock_version: Mapped[int] = mapped_column(nullable=False)

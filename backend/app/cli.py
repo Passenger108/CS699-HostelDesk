@@ -15,6 +15,14 @@ from app.hostel_structure.service import HOSTEL_4, find_location, find_room, see
 from app.users.models import Role, StudentProfile, User, WorkerProfile
 from app.workers.service import update_location
 
+TIMER_LABELS = {
+    "offers_timed_out": "Offers timed out",
+    "arrivals_closed": "Door waits closed",
+    "delays_escalated": "Delays sent to the supervisor",
+    "windows_missed": "Time windows missed",
+    "requests_expired": "Requests expired",
+    "locations_reminded": "Location reminders sent",
+}
 DEMO_PASSWORD = "hosteldesk-demo-2026"
 DEMO_USERS = [
     ("demo.student", Role.STUDENT, "Demo Student (fictional)"),
@@ -168,9 +176,8 @@ def register_cli(app: Flask) -> None:
     @app.cli.command("run-timers")
     def run_timers_command():
         result = run_due()
-        click.echo(f"Offers timed out: {result['offers_timed_out']}")
-        click.echo(f"Door waits closed: {result['arrivals_closed']}")
-        click.echo(f"Location reminders sent: {result['locations_reminded']}")
+        for key, label in TIMER_LABELS.items():
+            click.echo(f"{label}: {result[key]}")
         click.echo(f"Weekly credits: {_summary_text(result['weekly_credits'])}")
 
 

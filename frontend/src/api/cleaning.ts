@@ -39,10 +39,11 @@ export const takeBackRequest = (
 export const requestStep = (
   id: number,
   step: RequestStep,
-  body?: Record<string, string | number>,
+  body?: Record<string, string | number | undefined>,
+  method = "POST",
 ) =>
   apiFetch<RequestResponse>(`/cleaning/requests/${id}/${step}`, {
-    method: "POST",
+    method,
     body: body && JSON.stringify(body),
   });
 
