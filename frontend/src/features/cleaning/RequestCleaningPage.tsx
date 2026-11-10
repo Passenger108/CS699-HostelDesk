@@ -7,19 +7,11 @@ import { ApiError } from "../../api/client";
 import { fetchMyCredits } from "../../api/credits";
 import { fetchMyProfile } from "../../api/profile";
 import { ErrorMessage } from "../../components/ErrorMessage";
-import type {
-  AvailabilityMode,
-  NewCleaningRequest,
-} from "../../types/cleaning";
+import type { NewCleaningRequest } from "../../types/cleaning";
 import type { StudentProfile } from "../../types/profile";
+import { AvailabilityFields, NOW } from "./AvailabilityFields";
 
 const NOTE_LIMIT = 500;
-
-const AVAILABILITY_OPTIONS: { value: AvailabilityMode; label: string }[] = [
-  { value: "AVAILABLE_NOW", label: "I am available now" },
-  { value: "TIME_WINDOW", label: "A time window today" },
-  { value: "ANY_TIME_TODAY", label: "Any time today" },
-];
 
 function newClientKey(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto)
@@ -40,9 +32,7 @@ export function RequestCleaningPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [clientKey] = useState(newClientKey);
-  const [mode, setMode] = useState<AvailabilityMode>("AVAILABLE_NOW");
-  const [windowStart, setWindowStart] = useState("");
-  const [windowEnd, setWindowEnd] = useState("");
+  const [when, setWhen] = useState(NOW);
   const [urgent, setUrgent] = useState(false);
   const [urgentReason, setUrgentReason] = useState("");
   const [note, setNote] = useState("");
@@ -90,7 +80,9 @@ export function RequestCleaningPage() {
       <section className="card">
         <h1>Request cleaning</h1>
         <p>You already have an active cleaning request.</p>
-        <Link to="/">See it on Home</Link>
+        <Link to="/" className="btn btn--primary">
+          See it on Home
+        </Link>
       </section>
     );
   }
@@ -103,14 +95,10 @@ export function RequestCleaningPage() {
   function onSubmit(event: FormEvent) {
     event.preventDefault();
     const body: NewCleaningRequest = {
-      availability_mode: mode,
+      ...when,
       priority: urgent ? "URGENT" : "NORMAL",
       client_key: clientKey,
     };
-    if (mode === "TIME_WINDOW") {
-      body.window_start = windowStart;
-      body.window_end = windowEnd;
-    }
     if (urgent) body.urgent_reason = urgentReason;
     if (note.trim()) body.note = note;
     submit.mutate(body);
@@ -142,43 +130,11 @@ export function RequestCleaningPage() {
         )}
       </section>
 
-      <fieldset className="card choice-group">
-        <legend>When are you available?</legend>
-        {AVAILABILITY_OPTIONS.map((option) => (
-          <label key={option.value} className="choice">
-            <input
-              type="radio"
-              name="availability"
-              value={option.value}
-              checked={mode === option.value}
-              onChange={() => setMode(option.value)}
-            />
-            {option.label}
-          </label>
-        ))}
-        {mode === "TIME_WINDOW" && (
-          <div className="time-window">
-            <label>
-              From
-              <input
-                type="time"
-                value={windowStart}
-                onChange={(e) => setWindowStart(e.target.value)}
-                required
-              />
-            </label>
-            <label>
-              To
-              <input
-                type="time"
-                value={windowEnd}
-                onChange={(e) => setWindowEnd(e.target.value)}
-                required
-              />
-            </label>
-          </div>
-        )}
-      </fieldset>
+      <AvailabilityFields
+        when={when}
+        onChange={setWhen}
+        legend="When are you available?"
+      />
 
       <fieldset className="card choice-group">
         <legend>How soon?</legend>

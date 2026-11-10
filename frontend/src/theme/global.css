@@ -57,12 +57,19 @@ h1 {
 }
 
 .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-height: 44px;
   padding: 0 1rem;
   border-radius: var(--radius);
   border: 1px solid transparent;
   font: inherit;
+  text-decoration: none;
   cursor: pointer;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s;
 }
 .btn--primary {
   background: var(--color-primary);
@@ -71,14 +78,20 @@ h1 {
 .btn--primary:hover:not(:disabled) {
   background: var(--color-primary-strong);
 }
-.btn--primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
 .btn--ghost {
-  background: transparent;
-  border-color: var(--color-border);
-  color: inherit;
+  background: var(--color-surface);
+  border-color: #9fcfdf;
+  color: var(--color-primary-strong);
+}
+.btn--ghost:hover:not(:disabled) {
+  background: #d7ecf3;
+  border-color: var(--color-primary);
+}
+.btn:disabled {
+  background: #e9eef1;
+  border-color: #e9eef1;
+  color: #8a989f;
+  cursor: not-allowed;
 }
 
 input {
@@ -259,18 +272,16 @@ h3 {
   font-size: 0.85rem;
 }
 
+.btn--small {
+  min-height: 32px;
+  padding: 0 0.6rem;
+}
 .btn--danger {
   background: var(--color-danger);
   color: #fff;
 }
-.btn--danger:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-.btn--link {
-  display: inline-flex;
-  align-items: center;
-  text-decoration: none;
+.btn--danger:hover:not(:disabled) {
+  background: #8f1c13;
 }
 
 .status-chip {
@@ -305,6 +316,11 @@ h3 {
   color: var(--color-muted);
   background: #f1f4f6;
   border-color: var(--color-border);
+}
+.status-chip--alert {
+  color: #fff;
+  background: var(--color-danger);
+  border-color: var(--color-danger);
 }
 
 .request-card__head {
@@ -351,11 +367,6 @@ h3 {
 }
 .confirm p {
   margin: 0;
-}
-.confirm__buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
 }
 
 .choice-group {
@@ -434,9 +445,15 @@ h3 {
 }
 
 .choice-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  align-items: end;
+  gap: 0.75rem;
+}
+.card-footer {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-border);
 }
 .notice-list {
   list-style: none;

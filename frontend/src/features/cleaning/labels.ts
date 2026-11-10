@@ -1,4 +1,4 @@
-import type { Priority, RequestStatus } from "../../types/cleaning";
+import type { Delay, Priority, RequestStatus } from "../../types/cleaning";
 
 export const PRIORITY_LABELS: Record<Priority, string> = {
   NORMAL: "Normal",
@@ -11,7 +11,8 @@ export type StatusTone =
   | "working"
   | "attention"
   | "done"
-  | "stopped";
+  | "stopped"
+  | "alert";
 
 const TONES: Partial<Record<RequestStatus, StatusTone>> = {
   ACCEPTED_QUEUED: "working",
@@ -34,3 +35,13 @@ const TONES: Partial<Record<RequestStatus, StatusTone>> = {
 export function statusTone(status: RequestStatus): StatusTone {
   return TONES[status] ?? "waiting";
 }
+
+export const DELAY_BADGES: Record<
+  Exclude<Delay["state"], "NOT_DUE">,
+  [string, StatusTone]
+> = {
+  DUE: ["Late", "attention"],
+  FLAGGED: ["Late, reported by the student", "attention"],
+  ESCALATED: ["Very late, escalated", "alert"],
+  RESOLVED: ["Delay handled", "waiting"],
+};

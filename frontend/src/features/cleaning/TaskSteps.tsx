@@ -3,9 +3,16 @@ import { useEffect, useState } from "react";
 import { requestStep } from "../../api/cleaning";
 import { ErrorMessage } from "../../components/ErrorMessage";
 import type { CleaningRequest, RequestStep } from "../../types/cleaning";
+import { ETAS } from "../workers/OfferCard";
 
 type Body = Record<string, string | number>;
-type Choice = [action: string, step: RequestStep, label: string, body?: Body];
+type Choice = [
+  action: string,
+  step: RequestStep,
+  label: string,
+  body?: Body,
+  method?: string,
+];
 
 const STEPS: Choice[] = [
   ["set_off", "en-route", "Set off"],
@@ -18,10 +25,7 @@ const CHOICES: Choice[] = [
   ["no_answer", "student-unavailable", "Nobody answered"],
   ["come_in", "arrival-response", "Come in", { answer: "COME_IN" }],
   ["wait", "arrival-response", "Wait 5 minutes", { answer: "WAIT" }],
-];
-const DECISIONS = [
-  ["resume", "Let the work continue"],
-  ["find_new_worker", "Find a new worker"],
+  ["flag_delay", "flag-delay", "Tell the supervisor the worker is late"],
 ];
 
 function useTimeLeft(deadline?: string) {
@@ -38,10 +42,12 @@ function useTimeLeft(deadline?: string) {
 export function TaskSteps({ request }: { request: CleaningRequest }) {
   const queryClient = useQueryClient();
   const [reason, setReason] = useState("");
+  const [eta, setEta] = useState(ETAS[1]);
   const left = useTimeLeft(request.door?.deadline);
+  const etaLeft = useTimeLeft(request.delay?.expected_at);
   const step = useMutation({
-    mutationFn: ({ path, body }: { path: RequestStep; body?: Body }) =>
-      requestStep(request.id, path, body),
+    mutationFn: ([, path, , body, method]: Choice) =>
+      requestStep(request.id, path, body, method),
     onSuccess: () => setReason(""),
     onSettled: () =>
       ["cleaning", "me", "workers", "notifications"].forEach((key) =>
@@ -50,16 +56,33 @@ export function TaskSteps({ request }: { request: CleaningRequest }) {
   });
   const can = (action: string) => request.actions.includes(action);
   const worker = can("report_problem");
-  const deciding = can("resume") || can("find_new_worker");
-  const button = ([action, path, label, body]: Choice, main = false) => (
+  const decide = { reason, lock_version: request.lock_version };
+  const decisions = (
+    [
+      [
+        "resume",
+        "resolve-intervention",
+        "Let the work continue",
+        { ...decide, decision: "resume" },
+      ],
+      [
+        "find_new_worker",
+        "resolve-intervention",
+        "Find a new worker",
+        { ...decide, decision: "reassign" },
+      ],
+      ["resolve_delay", "resolve-delay", "Mark the delay as handled", decide],
+    ] as Choice[]
+  ).filter(([action]) => can(action));
+  const button = (choice: Choice, main = false) => (
     <button
-      key={action}
+      key={choice[0]}
       type="button"
       className={main ? "btn btn--primary" : "btn btn--ghost"}
-      disabled={step.isPending || !can(action)}
-      onClick={() => step.mutate({ path, body })}
+      disabled={step.isPending || !can(choice[0])}
+      onClick={() => step.mutate(choice)}
     >
-      {label}
+      {choice[2]}
     </button>
   );
   const reasonBox = (label: string) => (
@@ -82,6 +105,12 @@ export function TaskSteps({ request }: { request: CleaningRequest }) {
           {left && ` (${left})`}.
         </p>
       )}
+      {request.delay && (
+        <p className="request-card__note" role="status">
+          {request.delay.label}
+          {request.delay.state === "NOT_DUE" && etaLeft && ` (${etaLeft})`}.
+        </p>
+      )}
       {request.pause && (
         <p className="request-card__note">
           Paused while “{request.pause.from_label}”: {request.pause.reason}
@@ -97,7 +126,31 @@ export function TaskSteps({ request }: { request: CleaningRequest }) {
           button(choice, choice[2] === "Come in"),
         )}
       </div>
-      {(worker || deciding) && (
+      {can("update_eta") && (
+        <div className="choice-row">
+          <label className="text-field">
+            New arrival time
+            <select
+              value={eta}
+              onChange={(e) => setEta(Number(e.target.value))}
+            >
+              {ETAS.map((minutes) => (
+                <option key={minutes} value={minutes}>
+                  In {minutes} minutes
+                </option>
+              ))}
+            </select>
+          </label>
+          {button([
+            "update_eta",
+            "eta",
+            "Update arrival time",
+            { eta_minutes: eta },
+            "PATCH",
+          ])}
+        </div>
+      )}
+      {(worker || decisions.length > 0) && (
         <form className="stack" onSubmit={(e) => e.preventDefault()}>
           {reasonBox(worker ? "Problem" : "Reason for your decision")}
           <div className="choice-row">
@@ -108,19 +161,7 @@ export function TaskSteps({ request }: { request: CleaningRequest }) {
                 "Report a problem",
                 { reason },
               ])}
-            {DECISIONS.filter(([action]) => can(action)).map(
-              ([action, label]) =>
-                button([
-                  action,
-                  "resolve-intervention",
-                  label,
-                  {
-                    decision: action === "resume" ? "resume" : "reassign",
-                    reason,
-                    lock_version: request.lock_version,
-                  },
-                ]),
-            )}
+            {decisions.map((choice, index) => button(choice, index === 0))}
           </div>
         </form>
       )}

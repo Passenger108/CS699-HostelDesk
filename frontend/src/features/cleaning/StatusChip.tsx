@@ -1,5 +1,5 @@
-import type { RequestStatus } from "../../types/cleaning";
-import { statusTone } from "./labels";
+import type { Delay, RequestStatus } from "../../types/cleaning";
+import { DELAY_BADGES, statusTone } from "./labels";
 
 export function StatusChip({
   request,
@@ -11,4 +11,10 @@ export function StatusChip({
       {request.status_label}
     </span>
   );
+}
+
+export function DelayBadge({ delay }: { delay: Delay | null }) {
+  if (!delay || delay.state === "NOT_DUE") return null;
+  const [label, tone] = DELAY_BADGES[delay.state];
+  return <span className={`status-chip status-chip--${tone}`}>{label}</span>;
 }

@@ -9,7 +9,8 @@ import type { CleaningRequest } from "../../types/cleaning";
 import { SupervisorActions } from "../operations/SupervisorActions";
 import { PRIORITY_LABELS } from "./labels";
 import { RequestTimeline } from "./RequestTimeline";
-import { StatusChip } from "./StatusChip";
+import { RescheduleForm } from "./RescheduleForm";
+import { DelayBadge, StatusChip } from "./StatusChip";
 import { TaskSteps } from "./TaskSteps";
 
 function CancelControl({ request }: { request: CleaningRequest }) {
@@ -35,13 +36,15 @@ function CancelControl({ request }: { request: CleaningRequest }) {
 
   if (!confirming) {
     return (
-      <button
-        type="button"
-        className="btn btn--ghost"
-        onClick={() => setConfirming(true)}
-      >
-        Cancel request
-      </button>
+      <div className="choice-row">
+        <button
+          type="button"
+          className="btn btn--ghost"
+          onClick={() => setConfirming(true)}
+        >
+          Cancel request
+        </button>
+      </div>
     );
   }
   return (
@@ -64,7 +67,7 @@ function CancelControl({ request }: { request: CleaningRequest }) {
           />
         </label>
       )}
-      <div className="confirm__buttons">
+      <div className="choice-row">
         <button
           type="button"
           className="btn btn--danger"
@@ -97,6 +100,7 @@ export function RequestDetails({ request }: { request: CleaningRequest }) {
     <>
       <div className="request-card__head">
         <StatusChip request={request} />
+        <DelayBadge delay={request.delay} />
         {request.priority !== "NORMAL" && (
           <span className="chip">{PRIORITY_LABELS[request.priority]}</span>
         )}
@@ -113,10 +117,10 @@ export function RequestDetails({ request }: { request: CleaningRequest }) {
           <dt>When</dt>
           <dd>{request.availability.label}</dd>
         </div>
-        {request.eta_label && (
+        {request.assigned_worker && (
           <div className="field">
             <dt>Worker</dt>
-            <dd>{request.eta_label}</dd>
+            <dd>{request.eta_label ?? request.assigned_worker.name}</dd>
           </div>
         )}
         <div className="field">
@@ -134,14 +138,19 @@ export function RequestDetails({ request }: { request: CleaningRequest }) {
       {request.note && <p className="request-card__note">“{request.note}”</p>}
       <h3>Timeline</h3>
       <RequestTimeline events={request.timeline} />
-      <TaskSteps request={request} />
-      {request.actions.includes("cancel") && (
-        <CancelControl request={request} />
-      )}
-      <SupervisorActions
-        key={`${request.id}-${request.lock_version}`}
-        request={request}
-      />
+      <div className="stack">
+        {request.actions.includes("reschedule") && (
+          <RescheduleForm request={request} />
+        )}
+        <TaskSteps request={request} />
+        <SupervisorActions
+          key={`${request.id}-${request.lock_version}`}
+          request={request}
+        />
+        {request.actions.includes("cancel") && (
+          <CancelControl request={request} />
+        )}
+      </div>
     </>
   );
 }
@@ -164,7 +173,7 @@ export function ActiveRequestCard() {
       {data && !data.request && (
         <>
           <p className="muted">You have no active cleaning request.</p>
-          <Link to="/request" className="btn btn--primary btn--link">
+          <Link to="/request" className="btn btn--primary">
             Request cleaning
           </Link>
         </>
