@@ -1,11 +1,22 @@
 from datetime import datetime, time
+from io import BytesIO
 
 import click
 from flask import Flask
+from PIL import Image
+from werkzeug.datastructures import FileStorage
 
 from app.auth.passwords import hash_password
+from app.cleaning.arrival import answer_door, arrive, set_off, start_cleaning
+from app.cleaning.completion import CHECKLIST, add_proof, complete, dispute
 from app.cleaning.models import CleaningRequest, RequestStatus
-from app.cleaning.service import accept_offer, approve_request, offer_request, submit_request
+from app.cleaning.service import (
+    accept_offer,
+    active_request,
+    approve_request,
+    offer_request,
+    submit_request,
+)
 from app.cleaning.timers import run_due
 from app.common.errors import ApiError
 from app.common.time import HOSTEL_TZ, hostel_now
@@ -21,6 +32,7 @@ TIMER_LABELS = {
     "delays_escalated": "Delays sent to the supervisor",
     "windows_missed": "Time windows missed",
     "requests_expired": "Requests expired",
+    "confirmations_closed": "Cleanings closed without an answer",
     "locations_reminded": "Location reminders sent",
 }
 DEMO_PASSWORD = "hosteldesk-demo-2026"
@@ -78,6 +90,34 @@ def _seed_profile(user: User) -> bool:
         user.worker_profile = WorkerProfile(employee_id=employee_id, shift=shift)
         return True
     return False
+
+
+def _user(login_id: str) -> User | None:
+    return db.session.scalar(db.select(User).filter_by(login_id=login_id))
+
+
+def _demo_photo() -> FileStorage:
+    out = BytesIO()
+    Image.new("RGB", (800, 600), (214, 228, 240)).save(out, "PNG")
+    out.seek(0)
+    return FileStorage(out, filename="demo-room.png", content_type="image/png")
+
+
+def _seed_dispute(supervisor: User) -> CleaningRequest | None:
+    student, worker = _user("demo.student2"), _user("demo.worker3")
+    if active_request(student):
+        return None
+    request, _ = submit_request(student, "AVAILABLE_NOW", note="Please do the balcony too")
+    approve_request(request, supervisor)
+    offer_request(request, supervisor, worker.id, request.lock_version)
+    accept_offer(request.offers[-1], worker, 5)
+    set_off(request, worker)
+    arrive(request, worker)
+    answer_door(request, student, "COME_IN")
+    start_cleaning(request, worker)
+    add_proof(request, worker, _demo_photo())
+    complete(request, worker, dict.fromkeys(CHECKLIST, True))
+    return dispute(request, student, "The balcony was not cleaned.")
 
 
 def register_cli(app: Flask) -> None:
@@ -159,6 +199,13 @@ def register_cli(app: Flask) -> None:
                 offer_request(request, supervisor, worker.id, request.lock_version)
                 accept_offer(request.offers[-1], worker, eta)
                 click.echo(f"accepted request {request.id} by demo.worker2, ETA {eta} min")
+        try:
+            request = _seed_dispute(supervisor)
+        except ApiError as err:
+            click.echo(f"skipped  demo.student2: {err.message}")
+        else:
+            if request:
+                click.echo(f"disputed request {request.id} by demo.student2 after demo.worker3")
 
     @app.cli.command("grant-weekly-credits")
     @click.option(

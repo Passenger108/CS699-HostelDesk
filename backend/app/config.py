@@ -13,6 +13,8 @@ class BaseConfig:
     RATELIMIT_STORAGE_URI = os.environ.get("RATELIMIT_STORAGE_URI", "memory://")
     LOGIN_RATE_LIMIT = "20 per minute"
     TIMERS_ENABLED = os.environ.get("TIMERS_ENABLED", "1") == "1"
+    UPLOAD_FOLDER = os.environ.get("UPLOAD_FOLDER")
+    MAX_CONTENT_LENGTH = 11 * 1024 * 1024
 
     LOGIN_MAX_FAILURES = 5
     LOGIN_FAILURE_WINDOW = timedelta(minutes=15)
