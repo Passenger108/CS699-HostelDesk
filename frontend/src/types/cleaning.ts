@@ -117,7 +117,26 @@ export type RequestStep =
   | "eta"
   | "flag-delay"
   | "resolve-delay"
-  | "reschedule";
+  | "reschedule"
+  | "complete"
+  | "confirm"
+  | "dispute"
+  | "resolve-dispute";
+
+export type ChecklistItem =
+  | "swept"
+  | "mopped"
+  | "balcony_cleaned"
+  | "fan_cleaned";
+
+export interface Completion {
+  checklist: Record<ChecklistItem, boolean> | null;
+  proof_url: string | null;
+  proof_added_at: string;
+  confirm_deadline: string | null;
+  confirm_label: string | null;
+  dispute_reason: string | null;
+}
 
 export interface CleaningRequest extends RequestSummary {
   urgent_reason: string | null;
@@ -130,6 +149,7 @@ export interface CleaningRequest extends RequestSummary {
   door: Door | null;
   pause: Pause | null;
   reschedule: Reschedule | null;
+  completion: Completion | null;
 }
 
 export interface NewCleaningRequest {

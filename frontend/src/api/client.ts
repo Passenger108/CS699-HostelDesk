@@ -41,7 +41,9 @@ export function setSessionLostHandler(handler: () => void): void {
 
 async function send(path: string, init: RequestInit, token?: string): Promise<Response> {
   const headers = new Headers(init.headers);
-  if (init.body) headers.set('Content-Type', 'application/json');
+  if (init.body && !(init.body instanceof FormData)) {
+    headers.set('Content-Type', 'application/json');
+  }
   if (token) headers.set('Authorization', `Bearer ${token}`);
   return fetch(`${API_BASE}${path}`, { ...init, headers });
 }
@@ -64,7 +66,7 @@ async function refreshAccessToken(session: Session): Promise<Session | null> {
   return next;
 }
 
-export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+async function authorised(path: string, init: RequestInit): Promise<Response> {
   let session = loadSession();
   let res = await send(path, init, session?.accessToken);
 
@@ -78,7 +80,17 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   }
 
   if (!res.ok) throw await toError(res);
+  return res;
+}
+
+export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const res = await authorised(path, init);
   return (await res.json()) as T;
+}
+
+export async function apiBlob(path: string): Promise<Blob> {
+  const res = await authorised(path, {});
+  return res.blob();
 }
 
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {

@@ -45,6 +45,7 @@ def _register_blueprints(app: Flask) -> None:
     from app.credits.routes import bp as credits_bp
     from app.hostel_structure.routes import bp as hostel_bp
     from app.notifications.routes import bp as notifications_bp
+    from app.users.admin_routes import bp as admin_bp
     from app.users.routes import bp as users_bp
     from app.workers.routes import bp as workers_bp
     from app.workers.routes import offers_bp
@@ -63,4 +64,5 @@ def _register_blueprints(app: Flask) -> None:
     api.register_blueprint(notifications_bp)
     api.register_blueprint(workers_bp)
     api.register_blueprint(offers_bp)
+    api.register_blueprint(admin_bp)
     app.register_blueprint(api)

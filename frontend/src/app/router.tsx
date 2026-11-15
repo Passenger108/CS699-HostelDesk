@@ -1,4 +1,5 @@
 import { Route, Routes } from "react-router-dom";
+import { PeoplePage } from "../features/admin/PeoplePage";
 import { LoginPage } from "../features/auth/LoginPage";
 import { RequestCleaningPage } from "../features/cleaning/RequestCleaningPage";
 import { HistoryPage } from "../features/cleaning/HistoryPage";
@@ -60,6 +61,14 @@ export function AppRoutes() {
             element={
               <RequireRole roles={["SUPERVISOR", "SUPER_ADMIN"]}>
                 <WorkersPage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/people"
+            element={
+              <RequireRole roles={["SUPER_ADMIN"]}>
+                <PeoplePage />
               </RequireRole>
             }
           />
