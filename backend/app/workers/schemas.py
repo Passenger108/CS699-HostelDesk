@@ -33,7 +33,9 @@ def queue_rows(tasks: list[CleaningRequest], now: datetime) -> list[dict]:
                 "room": task.room_snapshot["number"],
                 "status": STATUS_LABELS[task.status],
                 "movable": task.status == S.ACCEPTED_QUEUED,
-                "due_label": f"Promised by {clock(due)}",
+                "due_label": f"Promised by {clock(due)}"
+                if task.status in (S.ACCEPTED_QUEUED, S.EN_ROUTE)
+                else None,
                 "warning": f"Earlier work ends around {clock(free)}, so this may be late."
                 if late
                 else None,

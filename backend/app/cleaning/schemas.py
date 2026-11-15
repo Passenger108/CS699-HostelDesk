@@ -22,9 +22,11 @@ from app.cleaning.workflow import (
     SUPERVISOR_CANCELLABLE,
     SUPERVISOR_CHANGEABLE,
     can_leave,
+    can_see_proof,
     delay_state,
     is_terminal,
     late_after,
+    latest_proof,
     no_answer,
     pause_event,
 )
@@ -94,6 +96,9 @@ def allowed_actions(request: CleaningRequest, viewer: User) -> list[str]:
     status, answer, now = request.status, request.arrival_response, utcnow()
     at_door = status == S.ARRIVED and as_utc(request.response_deadline) > now
     delay = delay_state(request, now)
+    answerable = (
+        status == S.AWAITING_STUDENT_CONFIRMATION and as_utc(request.confirm_deadline) > now
+    )
     if viewer.role in SUPERVISOR_ROLES:
         paused = pause_event(request)
         worker = request.assigned_worker
@@ -108,6 +113,7 @@ def allowed_actions(request: CleaningRequest, viewer: User) -> list[str]:
             and not on_site(worker.id),
             "find_new_worker": paused is not None and paused.old_state != S.CLEANING_IN_PROGRESS,
             "resolve_delay": delay in ("FLAGGED", "ESCALATED"),
+            "resolve_dispute": status == S.DISPUTED,
         }
     elif viewer.role == Role.WORKER:
         if request.assigned_worker_id != viewer.id:
@@ -121,6 +127,8 @@ def allowed_actions(request: CleaningRequest, viewer: User) -> list[str]:
             "no_answer": status == S.ARRIVED and no_answer(request, now),
             "report_problem": status in ON_SITE_STATES | {S.ACCEPTED_QUEUED},
             "update_eta": status in DELAY_STATES,
+            "add_proof": status == S.CLEANING_IN_PROGRESS,
+            "complete": status == S.CLEANING_IN_PROGRESS and bool(request.proofs),
         }
     else:
         checks = {
@@ -130,6 +138,8 @@ def allowed_actions(request: CleaningRequest, viewer: User) -> list[str]:
             "flag_delay": delay in ("DUE", "RESOLVED"),
             "reschedule": status == S.AWAITING_STUDENT_RESCHEDULE
             and as_utc(request.reschedule_deadline) > now,
+            "confirm": answerable,
+            "dispute": answerable,
         }
     return [action for action, allowed in checks.items() if allowed]
 
@@ -166,6 +176,28 @@ def reschedule_dict(request: CleaningRequest) -> dict | None:
     return {
         "deadline": iso(request.reschedule_deadline),
         "deadline_label": f"Choose a new time by {day_clock(request.reschedule_deadline)}",
+    }
+
+
+def completion_dict(request: CleaningRequest, viewer: User) -> dict | None:
+    proof = latest_proof(request)
+    if proof is None:
+        return None
+    waiting = request.status == S.AWAITING_STUDENT_CONFIRMATION
+    disputed = next(
+        (event for event in reversed(request.events) if event.event_type == "DISPUTED"), None
+    )
+    return {
+        "checklist": request.checklist,
+        "proof_url": f"/cleaning/requests/{request.id}/proof"
+        if can_see_proof(request, viewer)
+        else None,
+        "proof_added_at": iso(proof.created_at),
+        "confirm_deadline": iso(request.confirm_deadline) if waiting else None,
+        "confirm_label": f"Confirm or dispute by {clock(request.confirm_deadline)}"
+        if waiting
+        else None,
+        "dispute_reason": (disputed.payload_json or {}).get("reason") if disputed else None,
     }
 
 
@@ -217,6 +249,7 @@ def request_dict(request: CleaningRequest, viewer: User) -> dict:
         "door": door_dict(request),
         "pause": pause_dict(request),
         "reschedule": reschedule_dict(request),
+        "completion": completion_dict(request, viewer),
     }
 
 

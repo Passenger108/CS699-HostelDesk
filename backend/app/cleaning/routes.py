@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, send_file
 
 from app.auth.guards import current_user, login_required, roles_required
 from app.cleaning.arrival import (
@@ -12,6 +12,7 @@ from app.cleaning.arrival import (
     set_off,
     start_cleaning,
 )
+from app.cleaning.completion import add_proof, complete, confirm, dispute, resolve_dispute
 from app.cleaning.delays import flag_delay, reschedule, resolve_delay, update_eta
 from app.cleaning.recommendations import recommend
 from app.cleaning.schemas import SUPERVISOR_ROLES, operations_board, request_dict
@@ -26,7 +27,9 @@ from app.cleaning.service import (
     reassign_request,
     submit_request,
 )
-from app.common.errors import ApiError
+from app.cleaning.workflow import can_see_proof, latest_proof
+from app.common.errors import ApiError, fail
+from app.common.storage import path_for
 from app.users.models import Role
 
 bp = Blueprint("cleaning", __name__, url_prefix="/cleaning")
@@ -42,6 +45,7 @@ TEXT_FIELDS = (
     "reason",
     "answer",
     "decision",
+    "outcome",
 )
 WORKER_STEPS = {
     "en-route": set_off,
@@ -276,3 +280,65 @@ def new_time(request_id: int):
         body.get("window_end"),
     )
     return jsonify({"request": request_dict(cleaning_request, student)})
+
+
+@bp.post("/requests/<int:request_id>/proof")
+@roles_required(Role.WORKER)
+def upload_proof(request_id: int):
+    worker = current_user()
+    photo = request.files.get("photo")
+    cleaning_request = add_proof(get_request_for(request_id, worker), worker, photo)
+    return jsonify({"request": request_dict(cleaning_request, worker)}), 201
+
+
+@bp.get("/requests/<int:request_id>/proof")
+@login_required
+def show_proof(request_id: int):
+    viewer = current_user()
+    cleaning_request = get_request_for(request_id, viewer)
+    if not can_see_proof(cleaning_request, viewer):
+        raise fail("PROOF_HIDDEN")
+    proof = latest_proof(cleaning_request)
+    return send_file(path_for(proof.storage_key), mimetype=proof.content_type, max_age=0)
+
+
+@bp.post("/requests/<int:request_id>/complete")
+@roles_required(Role.WORKER)
+def finish(request_id: int):
+    worker = current_user()
+    checklist = json_body().get("checklist")
+    cleaning_request = complete(get_request_for(request_id, worker), worker, checklist)
+    return jsonify({"request": request_dict(cleaning_request, worker)})
+
+
+@bp.post("/requests/<int:request_id>/confirm")
+@roles_required(Role.STUDENT)
+def confirm_clean(request_id: int):
+    student = current_user()
+    cleaning_request = confirm(get_request_for(request_id, student), student)
+    return jsonify({"request": request_dict(cleaning_request, student)})
+
+
+@bp.post("/requests/<int:request_id>/dispute")
+@roles_required(Role.STUDENT)
+def dispute_clean(request_id: int):
+    student = current_user()
+    reason = json_body().get("reason")
+    cleaning_request = dispute(get_request_for(request_id, student), student, reason)
+    return jsonify({"request": request_dict(cleaning_request, student)})
+
+
+@bp.post("/requests/<int:request_id>/resolve-dispute")
+@roles_required(*SUPERVISOR_ROLES)
+def decide_dispute(request_id: int):
+    body = json_body()
+    supervisor = current_user()
+    cleaning_request = resolve_dispute(
+        get_request_for(request_id, supervisor),
+        supervisor,
+        body.get("outcome"),
+        body.get("reason"),
+        body.get("lock_version"),
+        body.get("goodwill") is True,
+    )
+    return jsonify({"request": request_dict(cleaning_request, supervisor)})
