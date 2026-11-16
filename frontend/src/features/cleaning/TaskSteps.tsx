@@ -28,7 +28,7 @@ const CHOICES: Choice[] = [
   ["flag_delay", "flag-delay", "Tell the supervisor the worker is late"],
 ];
 
-function useTimeLeft(deadline?: string) {
+export function useTimeLeft(deadline?: string) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);

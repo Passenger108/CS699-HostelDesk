@@ -58,7 +58,8 @@ export function TaskQueue({
                 >
                   Room {task.room}
                 </Link>{" "}
-                · {task.status} · {task.due_label}
+                · {task.status}
+                {task.due_label && ` · ${task.due_label}`}
                 {task.warning && <span className="error"> {task.warning}</span>}
               </span>
               {task.movable && (
