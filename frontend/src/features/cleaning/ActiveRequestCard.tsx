@@ -10,8 +10,16 @@ import { SupervisorActions } from "../operations/SupervisorActions";
 import { PRIORITY_LABELS } from "./labels";
 import { RequestTimeline } from "./RequestTimeline";
 import { RescheduleForm } from "./RescheduleForm";
+import { CompletionPanel } from "./CompletionPanel";
 import { DelayBadge, StatusChip } from "./StatusChip";
 import { TaskSteps } from "./TaskSteps";
+
+const CREDIT_LABELS: Record<string, string> = {
+  RESERVED: "1 reserved",
+  CONSUMED: "1 used",
+  RELEASED: "Returned",
+  NONE: "None used",
+};
 
 function CancelControl({ request }: { request: CleaningRequest }) {
   const queryClient = useQueryClient();
@@ -125,17 +133,14 @@ export function RequestDetails({ request }: { request: CleaningRequest }) {
         )}
         <div className="field">
           <dt>Credit</dt>
-          <dd>
-            {request.credit_reservation === "RESERVED"
-              ? "1 reserved"
-              : "None used"}
-          </dd>
+          <dd>{CREDIT_LABELS[request.credit_reservation]}</dd>
         </div>
       </dl>
       {request.urgent_reason && (
         <p className="request-card__note">Urgent: {request.urgent_reason}</p>
       )}
       {request.note && <p className="request-card__note">“{request.note}”</p>}
+      <CompletionPanel request={request} />
       <h3>Timeline</h3>
       <RequestTimeline events={request.timeline} />
       <div className="stack">
