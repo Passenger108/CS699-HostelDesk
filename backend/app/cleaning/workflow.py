@@ -6,6 +6,7 @@ from app.cleaning.models import CleaningRequest, RequestEvent, RequestStatus
 from app.common.errors import ApiError, fail
 from app.common.models import as_utc, utcnow
 from app.extensions import db
+from app.users.models import Role, User
 
 S = RequestStatus
 
@@ -134,6 +135,7 @@ SUPERVISOR_CANCELLABLE = (STUDENT_CANCELLABLE | ON_SITE_STATES | {S.SUPERVISOR_I
 OFFERABLE = frozenset({S.AWAITING_ASSIGNMENT, S.AWAITING_REASSIGNMENT})
 DELAY_STATES = frozenset({S.ACCEPTED_QUEUED, S.EN_ROUTE})
 PRE_TRAVEL = SUPERVISOR_CHANGEABLE | {S.OFFERED, S.ACCEPTED_QUEUED}
+STUDENT_PROOF_STATES = frozenset({S.DISPUTED, S.CLOSED_VALID_AFTER_REVIEW, S.CLOSED_UNSATISFACTORY})
 
 STATUS_LABELS: dict[RequestStatus, str] = {
     S.SUBMITTED: "Waiting for supervisor approval",
@@ -182,6 +184,13 @@ EVENT_LABELS: dict[str, str] = {
     "DELAY_RESOLVED": "The supervisor dealt with the delay",
     "WINDOW_MISSED": "The time window ended before the worker came",
     "RESCHEDULED": "The student chose a new time",
+    "PROOF_ADDED": "The worker added a photo of the cleaned room",
+    "COMPLETED": "The worker finished cleaning",
+    "CONFIRMED": "The student confirmed the cleaning",
+    "AUTO_CONFIRMED": "Closed as cleaned, nobody disputed it in time",
+    "DISPUTED": "The student disputed the cleaning",
+    "DISPUTE_VALID": "The supervisor found the cleaning valid",
+    "DISPUTE_UNSATISFACTORY": "The supervisor found the cleaning unsatisfactory",
 }
 
 
@@ -281,3 +290,17 @@ def sweep(query, act) -> int:
         except ApiError:
             db.session.rollback()
     return done
+
+
+def latest_proof(request: CleaningRequest):
+    return request.proofs[-1] if request.proofs else None
+
+
+def can_see_proof(request: CleaningRequest, viewer: User) -> bool:
+    if latest_proof(request) is None:
+        return False
+    if viewer.role in (Role.SUPERVISOR, Role.SUPER_ADMIN):
+        return True
+    if viewer.role == Role.WORKER:
+        return request.assigned_worker_id == viewer.id
+    return request.student_id == viewer.id and request.status in STUDENT_PROOF_STATES

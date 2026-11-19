@@ -14,7 +14,7 @@ export interface QueueTask {
   room: string;
   status: string;
   movable: boolean;
-  due_label: string;
+  due_label: string | null;
   warning: string | null;
 }
 

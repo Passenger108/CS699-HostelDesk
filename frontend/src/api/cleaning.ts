@@ -7,7 +7,7 @@ import type {
   RequestPage,
   RequestStep,
 } from "../types/cleaning";
-import { apiFetch } from "./client";
+import { apiBlob, apiFetch } from "./client";
 
 type RequestResponse = { request: CleaningRequest };
 type ActiveResponse = { request: CleaningRequest | null };
@@ -39,7 +39,7 @@ export const takeBackRequest = (
 export const requestStep = (
   id: number,
   step: RequestStep,
-  body?: Record<string, string | number | undefined>,
+  body?: Record<string, unknown>,
   method = "POST",
 ) =>
   apiFetch<RequestResponse>(`/cleaning/requests/${id}/${step}`, {
@@ -78,3 +78,14 @@ export const changeRequest = (id: number, body: RequestChange) =>
   });
 
 export const fetchBoard = () => apiFetch<Board>("/cleaning/board");
+
+export const uploadProof = (id: number, photo: File) => {
+  const form = new FormData();
+  form.append("photo", photo);
+  return apiFetch<RequestResponse>(`/cleaning/requests/${id}/proof`, {
+    method: "POST",
+    body: form,
+  });
+};
+
+export const fetchProof = (path: string) => apiBlob(path);

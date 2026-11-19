@@ -84,6 +84,27 @@ TEMPLATES = {
     ),
     "RESCHEDULED": ("New time chosen", "Room {room} chose a new time: {when}."),
     "REQUEST_EXPIRED": ("Request expired", "The request for room {room} expired: {reason}"),
+    "WORK_DONE": (
+        "Room cleaned",
+        "{worker} finished room {room}. Confirm or dispute by {time}, or it closes as cleaned.",
+    ),
+    "CLEANING_CONFIRMED": ("Cleaning confirmed", "Room {room} was confirmed as cleaned."),
+    "AUTO_CONFIRMED": (
+        "Closed as cleaned",
+        "Room {room} closed as cleaned because nobody disputed it in time.",
+    ),
+    "CLEANING_DISPUTED": (
+        "Cleaning disputed",
+        "The student in room {room} disputed the cleaning: {reason}",
+    ),
+    "DISPUTE_RESOLVED": (
+        "Dispute decided",
+        "The supervisor decided the dispute for room {room}: {outcome}. {reason}",
+    ),
+    "GOODWILL_GRANTED": (
+        "Goodwill credit",
+        "You got one goodwill credit for room {room}. Use it by {time}.",
+    ),
     "REQUEST_CANCELLED_BY_STUDENT": (
         "Request cancelled",
         "The student in room {room} cancelled their cleaning request.",

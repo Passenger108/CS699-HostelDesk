@@ -22,6 +22,8 @@ class TimestampMixin:
 
 
 def as_utc(value: datetime | None) -> datetime | None:
-    if value is not None and value.tzinfo is None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
-    return value
+    return value.astimezone(timezone.utc)

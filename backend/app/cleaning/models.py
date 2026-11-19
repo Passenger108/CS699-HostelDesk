@@ -111,6 +111,8 @@ class CleaningRequest(IdMixin, TimestampMixin, db.Model):
     response_deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     delay_state: Mapped[str | None] = mapped_column(String(20))
     reschedule_deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    checklist: Mapped[dict[str, bool] | None] = mapped_column(JSON)
+    confirm_deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     resolution_reason: Mapped[str | None] = mapped_column(String(500))
     lock_version: Mapped[int] = mapped_column(nullable=False)
@@ -123,6 +125,9 @@ class CleaningRequest(IdMixin, TimestampMixin, db.Model):
     )
     offers: Mapped[list["AssignmentOffer"]] = relationship(
         back_populates="request", order_by="AssignmentOffer.id"
+    )
+    proofs: Mapped[list["ProofPhoto"]] = relationship(
+        back_populates="request", order_by="ProofPhoto.id"
     )
 
     __mapper_args__ = {"version_id_col": lock_version}
@@ -169,6 +174,21 @@ class AssignmentOffer(IdMixin, TimestampMixin, db.Model):
     request: Mapped[CleaningRequest] = relationship(back_populates="offers")
     worker: Mapped[User] = relationship(foreign_keys=[worker_id])
     offered_by: Mapped[User] = relationship(foreign_keys=[offered_by_id])
+
+
+class ProofPhoto(IdMixin, TimestampMixin, db.Model):
+    __tablename__ = "proof_photos"
+
+    request_id: Mapped[int] = mapped_column(
+        ForeignKey("cleaning_requests.id"), nullable=False, index=True
+    )
+    uploaded_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    storage_key: Mapped[str] = mapped_column(String(80), unique=True, nullable=False)
+    content_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(nullable=False)
+
+    request: Mapped[CleaningRequest] = relationship(back_populates="proofs")
+    uploaded_by: Mapped[User] = relationship()
 
 
 @event.listens_for(RequestEvent, "before_update")
