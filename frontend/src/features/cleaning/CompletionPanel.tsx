@@ -278,14 +278,14 @@ export function CompletionPanel({ request }: { request: CleaningRequest }) {
       {(can("confirm") || can("dispute")) && (
         <StudentAnswer request={request} />
       )}
-      {completion && !request.is_active && request.resolution_reason && (
-        <p className="request-card__note">
-          Decision: {request.resolution_reason}
-        </p>
-      )}
       {completion?.dispute_reason && (
         <p className="request-card__note">
           Dispute: “{completion.dispute_reason}”
+        </p>
+      )}
+      {completion && !request.is_active && request.resolution_reason && (
+        <p className="request-card__note">
+          Decision: {request.resolution_reason}
         </p>
       )}
       {ticked.length > 0 && (

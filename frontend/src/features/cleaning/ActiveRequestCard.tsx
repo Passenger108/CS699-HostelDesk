@@ -11,7 +11,9 @@ import { PRIORITY_LABELS } from "./labels";
 import { RequestTimeline } from "./RequestTimeline";
 import { RescheduleForm } from "./RescheduleForm";
 import { CompletionPanel } from "./CompletionPanel";
+import { FeedbackPanel } from "./FeedbackPanel";
 import { DelayBadge, StatusChip } from "./StatusChip";
+import { TaskChat } from "./TaskChat";
 import { TaskSteps } from "./TaskSteps";
 
 const CREDIT_LABELS: Record<string, string> = {
@@ -141,6 +143,8 @@ export function RequestDetails({ request }: { request: CleaningRequest }) {
       )}
       {request.note && <p className="request-card__note">“{request.note}”</p>}
       <CompletionPanel request={request} />
+      <FeedbackPanel request={request} />
+      {request.chat && <TaskChat request={request} />}
       <h3>Timeline</h3>
       <RequestTimeline events={request.timeline} />
       <div className="stack">
@@ -177,6 +181,18 @@ export function ActiveRequestCard() {
       {data && data.request && <RequestDetails request={data.request} />}
       {data && !data.request && (
         <>
+          {data.to_rate && (
+            <p className="confirm">
+              Your last cleaning of room {data.to_rate.room} is done.{" "}
+              <Link
+                to={`/requests/${data.to_rate.id}`}
+                className="btn btn--ghost btn--small"
+              >
+                Rate it
+              </Link>{" "}
+              <span className="muted">{data.to_rate.deadline_label}</span>
+            </p>
+          )}
           <p className="muted">You have no active cleaning request.</p>
           <Link to="/request" className="btn btn--primary">
             Request cleaning
