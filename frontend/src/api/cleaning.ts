@@ -1,16 +1,21 @@
 import type {
   Board,
   CleaningRequest,
+  Message,
   NewCleaningRequest,
   RequestFilters,
   RequestChange,
   RequestPage,
+  RatingDue,
   RequestStep,
 } from "../types/cleaning";
 import { apiBlob, apiFetch } from "./client";
 
 type RequestResponse = { request: CleaningRequest };
-type ActiveResponse = { request: CleaningRequest | null };
+type ActiveResponse = {
+  request: CleaningRequest | null;
+  to_rate: RatingDue | null;
+};
 
 export const fetchActiveRequest = () =>
   apiFetch<ActiveResponse>("/cleaning/requests/active");
@@ -89,3 +94,18 @@ export const uploadProof = (id: number, photo: File) => {
 };
 
 export const fetchProof = (path: string) => apiBlob(path);
+
+export const fetchMessages = (id: number) =>
+  apiFetch<{ messages: Message[] }>(`/cleaning/requests/${id}/messages`);
+
+export const sendMessage = (id: number, body: string) =>
+  apiFetch<{ message: Message }>(`/cleaning/requests/${id}/messages`, {
+    method: "POST",
+    body: JSON.stringify({ body }),
+  });
+
+export const rateCleaning = (id: number, rating: number, comment: string) =>
+  apiFetch<RequestResponse>(`/cleaning/requests/${id}/feedback`, {
+    method: "POST",
+    body: JSON.stringify({ rating, comment: comment.trim() || undefined }),
+  });

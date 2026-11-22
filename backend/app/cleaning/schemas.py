@@ -9,6 +9,7 @@ from app.cleaning.models import (
     Priority,
     RequestEvent,
     RequestStatus,
+    TaskMessage,
 )
 from app.cleaning.workflow import (
     ACTIVE_STATES,
@@ -23,7 +24,10 @@ from app.cleaning.workflow import (
     SUPERVISOR_CHANGEABLE,
     can_leave,
     can_see_proof,
+    chat_access,
     delay_state,
+    feedback_deadline,
+    feedback_state,
     is_terminal,
     late_after,
     latest_proof,
@@ -140,6 +144,7 @@ def allowed_actions(request: CleaningRequest, viewer: User) -> list[str]:
             and as_utc(request.reschedule_deadline) > now,
             "confirm": answerable,
             "dispute": answerable,
+            "rate": feedback_state(request, now) == "OPEN",
         }
     return [action for action, allowed in checks.items() if allowed]
 
@@ -201,6 +206,48 @@ def completion_dict(request: CleaningRequest, viewer: User) -> dict | None:
     }
 
 
+def chat_dict(request: CleaningRequest, viewer: User) -> dict | None:
+    access = chat_access(request, viewer)
+    if access is None:
+        return None
+    note = None
+    if viewer.role == Role.SUPER_ADMIN:
+        note = "You can read this chat but not send messages."
+    elif access == "read":
+        note = "This request is closed, so the chat is read-only."
+    return {"can_send": access == "send", "count": len(request.messages), "note": note}
+
+
+def message_dict(message: TaskMessage, viewer: User) -> dict:
+    return {
+        "id": message.id,
+        "body": message.body,
+        "sender": person(message.sender),
+        "mine": message.sender_id == viewer.id,
+        "created_at": iso(message.created_at),
+        "time_label": clock(message.created_at),
+    }
+
+
+def feedback_dict(request: CleaningRequest, viewer: User) -> dict | None:
+    state = feedback_state(request, utcnow())
+    if viewer.role == Role.WORKER or state == "NOT_OPEN":
+        return None
+    feedback = request.feedback
+    labels = {
+        "OPEN": f"Rate the cleaning by {day_clock(feedback_deadline(request))}",
+        "SUBMITTED": "Rated",
+        "DISABLED_DISPUTE": "A disputed cleaning cannot be rated",
+        "EXPIRED": "Not rated, the 24 hours to rate have passed",
+    }
+    return {
+        "state": state,
+        "label": labels[state],
+        "rating": feedback.rating if feedback else None,
+        "comment": feedback.comment if feedback else None,
+    }
+
+
 def pause_dict(request: CleaningRequest) -> dict | None:
     event = pause_event(request)
     if event is None:
@@ -250,6 +297,8 @@ def request_dict(request: CleaningRequest, viewer: User) -> dict:
         "pause": pause_dict(request),
         "reschedule": reschedule_dict(request),
         "completion": completion_dict(request, viewer),
+        "chat": chat_dict(request, viewer),
+        "feedback": feedback_dict(request, viewer),
     }
 
 

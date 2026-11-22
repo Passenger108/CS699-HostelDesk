@@ -7,6 +7,16 @@ export interface Worker extends WorkerProfile {
   tasks: QueueTask[];
   queue_warning: string | null;
   off_duty_requested_at: string | null;
+  rating: RatingSummary;
+}
+
+export interface RatingSummary {
+  count: number;
+  average: number | null;
+}
+
+export interface MyFeedback extends RatingSummary {
+  comments: string[];
 }
 
 export interface QueueTask {

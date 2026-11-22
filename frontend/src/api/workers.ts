@@ -1,6 +1,7 @@
 import type { CleaningRequest } from "../types/cleaning";
 import type { LocationInfo } from "../types/hostel";
 import type {
+  MyFeedback,
   QueueTask,
   Recommendation,
   Worker,
@@ -60,3 +61,6 @@ export const reorderQueue = (id: number | "me", order: number[]) =>
 export const changeDuty = (
   path: "me/off-duty-request" | "me/on-duty" | `${number}/off-duty/approve`,
 ) => apiFetch<{ worker: Worker }>(`/workers/${path}`, { method: "POST" });
+
+export const fetchMyFeedback = () =>
+  apiFetch<{ feedback: MyFeedback }>("/workers/me/feedback");
