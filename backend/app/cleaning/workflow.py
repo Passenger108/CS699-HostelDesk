@@ -136,6 +136,7 @@ OFFERABLE = frozenset({S.AWAITING_ASSIGNMENT, S.AWAITING_REASSIGNMENT})
 DELAY_STATES = frozenset({S.ACCEPTED_QUEUED, S.EN_ROUTE})
 PRE_TRAVEL = SUPERVISOR_CHANGEABLE | {S.OFFERED, S.ACCEPTED_QUEUED}
 STUDENT_PROOF_STATES = frozenset({S.DISPUTED, S.CLOSED_VALID_AFTER_REVIEW, S.CLOSED_UNSATISFACTORY})
+FEEDBACK_HOURS = 24
 
 STATUS_LABELS: dict[RequestStatus, str] = {
     S.SUBMITTED: "Waiting for supervisor approval",
@@ -304,3 +305,29 @@ def can_see_proof(request: CleaningRequest, viewer: User) -> bool:
     if viewer.role == Role.WORKER:
         return request.assigned_worker_id == viewer.id
     return request.student_id == viewer.id and request.status in STUDENT_PROOF_STATES
+
+
+def chat_access(request: CleaningRequest, viewer: User) -> str | None:
+    if not any(event.event_type == "ACCEPTED" for event in request.events):
+        return None
+    if viewer.role == Role.WORKER and request.assigned_worker_id != viewer.id:
+        return None
+    if viewer.role == Role.SUPER_ADMIN or is_terminal(request.status):
+        return "read"
+    return "send"
+
+
+def feedback_deadline(request: CleaningRequest) -> datetime | None:
+    if request.closed_at is None:
+        return None
+    return as_utc(request.closed_at) + timedelta(hours=FEEDBACK_HOURS)
+
+
+def feedback_state(request: CleaningRequest, now: datetime) -> str:
+    if request.feedback is not None:
+        return "SUBMITTED"
+    if request.status in STUDENT_PROOF_STATES:
+        return "DISABLED_DISPUTE"
+    if request.status != S.CLOSED_SUCCESSFUL:
+        return "NOT_OPEN"
+    return "OPEN" if feedback_deadline(request) > now else "EXPIRED"

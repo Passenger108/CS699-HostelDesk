@@ -14,8 +14,15 @@ from app.cleaning.arrival import (
 )
 from app.cleaning.completion import add_proof, complete, confirm, dispute, resolve_dispute
 from app.cleaning.delays import flag_delay, reschedule, resolve_delay, update_eta
+from app.cleaning.feedback import rating_due, submit_feedback
+from app.cleaning.messages import list_messages, post_message
 from app.cleaning.recommendations import recommend
-from app.cleaning.schemas import SUPERVISOR_ROLES, operations_board, request_dict
+from app.cleaning.schemas import (
+    SUPERVISOR_ROLES,
+    message_dict,
+    operations_board,
+    request_dict,
+)
 from app.cleaning.service import (
     active_request,
     approve_request,
@@ -46,6 +53,8 @@ TEXT_FIELDS = (
     "answer",
     "decision",
     "outcome",
+    "body",
+    "comment",
 )
 WORKER_STEPS = {
     "en-route": set_off,
@@ -111,7 +120,10 @@ def my_active_request():
     student = current_user()
     cleaning_request = active_request(student)
     return jsonify(
-        {"request": request_dict(cleaning_request, student) if cleaning_request else None}
+        {
+            "request": request_dict(cleaning_request, student) if cleaning_request else None,
+            "to_rate": None if cleaning_request else rating_due(student),
+        }
     )
 
 
@@ -342,3 +354,31 @@ def decide_dispute(request_id: int):
         body.get("goodwill") is True,
     )
     return jsonify({"request": request_dict(cleaning_request, supervisor)})
+
+
+@bp.get("/requests/<int:request_id>/messages")
+@login_required
+def messages(request_id: int):
+    viewer = current_user()
+    rows = list_messages(get_request_for(request_id, viewer), viewer)
+    return jsonify({"messages": [message_dict(row, viewer) for row in rows]})
+
+
+@bp.post("/requests/<int:request_id>/messages")
+@login_required
+def send_message(request_id: int):
+    viewer = current_user()
+    body = json_body().get("body")
+    message = post_message(get_request_for(request_id, viewer), viewer, body)
+    return jsonify({"message": message_dict(message, viewer)}), 201
+
+
+@bp.post("/requests/<int:request_id>/feedback")
+@roles_required(Role.STUDENT)
+def rate(request_id: int):
+    body = json_body()
+    student = current_user()
+    cleaning_request = submit_feedback(
+        get_request_for(request_id, student), student, body.get("rating"), body.get("comment")
+    )
+    return jsonify({"request": request_dict(cleaning_request, student)}), 201

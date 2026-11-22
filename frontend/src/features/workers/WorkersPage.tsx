@@ -3,6 +3,7 @@ import { useState } from "react";
 import { fetchWorkers } from "../../api/workers";
 import { ErrorMessage } from "../../components/ErrorMessage";
 import { LocationForm } from "./LocationForm";
+import { ratingText } from "./MyRatings";
 import { TaskQueue } from "./TaskQueue";
 
 export function WorkersPage() {
@@ -26,7 +27,7 @@ export function WorkersPage() {
           <p className="muted">
             {worker.availability_label} ·{" "}
             {worker.last_location?.label ?? "No location"} ·{" "}
-            {worker.location_note}
+            {worker.location_note} · {ratingText(worker.rating)}
           </p>
           <TaskQueue worker={worker} />
           {editing === worker.id ? (

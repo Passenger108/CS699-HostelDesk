@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, request
 
 from app.auth.guards import current_user, roles_required
 from app.cleaning.routes import json_body
+from app.reports.audit import audit_page
 from app.users.models import Role
 from app.users.schemas import account_dict
 from app.users.service import create_user, list_users, set_status
@@ -27,3 +28,9 @@ def new_user():
 def change_user(user_id: int):
     user = set_status(current_user(), user_id, json_body().get("account_status"))
     return jsonify({"user": account_dict(user)})
+
+
+@bp.get("/audit-logs")
+@roles_required(Role.SUPER_ADMIN)
+def audit_logs():
+    return jsonify(audit_page(request.args))

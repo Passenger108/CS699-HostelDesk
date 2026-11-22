@@ -8,8 +8,8 @@ from werkzeug.datastructures import FileStorage
 
 from app.auth.passwords import hash_password
 from app.cleaning.arrival import answer_door, arrive, set_off, start_cleaning
-from app.cleaning.completion import CHECKLIST, add_proof, complete, dispute
-from app.cleaning.models import CleaningRequest, RequestStatus
+from app.cleaning.completion import CHECKLIST, add_proof, complete, confirm, dispute
+from app.cleaning.models import CleaningRequest, Feedback, RequestStatus, TaskMessage
 from app.cleaning.service import (
     accept_offer,
     active_request,
@@ -46,6 +46,7 @@ DEMO_USERS = [
     ("demo.student4", Role.STUDENT, "Kabir Demo (fictional)"),
     ("demo.student5", Role.STUDENT, "Meera Demo (fictional)"),
     ("demo.student6", Role.STUDENT, "Rohan Demo (fictional)"),
+    ("demo.student7", Role.STUDENT, "Isha Demo (fictional)"),
     ("demo.worker2", Role.WORKER, "Sunil Demo (fictional)"),
     ("demo.worker3", Role.WORKER, "Lata Demo (fictional)"),
 ]
@@ -56,6 +57,7 @@ DEMO_STUDENTS = {
     "demo.student4": ("DEMO24B004", "D412"),
     "demo.student5": ("DEMO24B005", "E509"),
     "demo.student6": ("DEMO24B006", "F614"),
+    "demo.student7": ("DEMO24B007", "G708"),
 }
 DEMO_WORKERS = {
     "demo.worker": ("DEMO-W01", "Morning"),
@@ -103,21 +105,64 @@ def _demo_photo() -> FileStorage:
     return FileStorage(out, filename="demo-room.png", content_type="image/png")
 
 
-def _seed_dispute(supervisor: User) -> CleaningRequest | None:
-    student, worker = _user("demo.student2"), _user("demo.worker3")
+def _seed_cleaned(supervisor: User, login_id: str, note: str, chat: list[tuple[str, str]]):
+    student, worker = _user(login_id), _user("demo.worker3")
     if active_request(student):
         return None
-    request, _ = submit_request(student, "AVAILABLE_NOW", note="Please do the balcony too")
+    request, _ = submit_request(student, "AVAILABLE_NOW", note=note)
     approve_request(request, supervisor)
     offer_request(request, supervisor, worker.id, request.lock_version)
     accept_offer(request.offers[-1], worker, 5)
+    for sender, body in chat:
+        db.session.add(TaskMessage(request=request, sender=_user(sender), body=body))
     set_off(request, worker)
     arrive(request, worker)
     answer_door(request, student, "COME_IN")
     start_cleaning(request, worker)
     add_proof(request, worker, _demo_photo())
-    complete(request, worker, dict.fromkeys(CHECKLIST, True))
-    return dispute(request, student, "The balcony was not cleaned.")
+    return complete(request, worker, dict.fromkeys(CHECKLIST, True))
+
+
+def _rate(request: CleaningRequest) -> str:
+    confirm(request, request.student)
+    db.session.add(Feedback(request=request, worker_id=request.assigned_worker_id, rating=4))
+    db.session.commit()
+    return "rated   "
+
+
+def _dispute(request: CleaningRequest) -> str:
+    dispute(request, request.student, "The balcony was not cleaned.")
+    return "disputed"
+
+
+DEMO_HISTORY = [
+    (
+        "demo.student7",
+        "The fan is very dusty",
+        [
+            ("demo.worker3", "I will reach in 5 minutes."),
+            ("demo.student7", "Okay, I am in my room."),
+        ],
+        _rate,
+    ),
+    (
+        "demo.student2",
+        "Please do the balcony too",
+        [("demo.student2", "Please clean the balcony as well.")],
+        _dispute,
+    ),
+]
+
+
+def _seed_history(supervisor: User) -> None:
+    for login_id, note, chat, finish in DEMO_HISTORY:
+        try:
+            request = _seed_cleaned(supervisor, login_id, note, chat)
+        except ApiError as err:
+            click.echo(f"skipped  {login_id}: {err.message}")
+            continue
+        if request:
+            click.echo(f"{finish(request)} request {request.id} by {login_id} after demo.worker3")
 
 
 def register_cli(app: Flask) -> None:
@@ -199,13 +244,7 @@ def register_cli(app: Flask) -> None:
                 offer_request(request, supervisor, worker.id, request.lock_version)
                 accept_offer(request.offers[-1], worker, eta)
                 click.echo(f"accepted request {request.id} by demo.worker2, ETA {eta} min")
-        try:
-            request = _seed_dispute(supervisor)
-        except ApiError as err:
-            click.echo(f"skipped  demo.student2: {err.message}")
-        else:
-            if request:
-                click.echo(f"disputed request {request.id} by demo.student2 after demo.worker3")
+        _seed_history(supervisor)
 
     @app.cli.command("grant-weekly-credits")
     @click.option(

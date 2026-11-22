@@ -105,6 +105,7 @@ TEMPLATES = {
         "Goodwill credit",
         "You got one goodwill credit for room {room}. Use it by {time}.",
     ),
+    "TASK_MESSAGE": ("New message", "{sender} wrote about room {room}: {text}"),
     "REQUEST_CANCELLED_BY_STUDENT": (
         "Request cancelled",
         "The student in room {room} cancelled their cleaning request.",

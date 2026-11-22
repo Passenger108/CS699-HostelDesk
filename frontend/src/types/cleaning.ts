@@ -138,6 +138,40 @@ export interface Completion {
   dispute_reason: string | null;
 }
 
+export interface Chat {
+  can_send: boolean;
+  count: number;
+  note: string | null;
+}
+
+export interface Message {
+  id: number;
+  body: string;
+  sender: Person;
+  mine: boolean;
+  created_at: string;
+  time_label: string;
+}
+
+export type FeedbackState =
+  | "OPEN"
+  | "SUBMITTED"
+  | "DISABLED_DISPUTE"
+  | "EXPIRED";
+
+export interface FeedbackInfo {
+  state: FeedbackState;
+  label: string;
+  rating: number | null;
+  comment: string | null;
+}
+
+export interface RatingDue {
+  id: number;
+  room: string;
+  deadline_label: string;
+}
+
 export interface CleaningRequest extends RequestSummary {
   urgent_reason: string | null;
   note: string | null;
@@ -150,6 +184,8 @@ export interface CleaningRequest extends RequestSummary {
   pause: Pause | null;
   reschedule: Reschedule | null;
   completion: Completion | null;
+  chat: Chat | null;
+  feedback: FeedbackInfo | null;
 }
 
 export interface NewCleaningRequest {

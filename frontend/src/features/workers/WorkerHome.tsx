@@ -5,6 +5,7 @@ import { ErrorMessage } from "../../components/ErrorMessage";
 import type { Worker } from "../../types/worker";
 import { WorkerDetails } from "../profile/ProfilePage";
 import { LocationForm } from "./LocationForm";
+import { MyRatings } from "./MyRatings";
 import { OfferCard } from "./OfferCard";
 import { TaskQueue } from "./TaskQueue";
 
@@ -37,6 +38,7 @@ export function WorkerHome() {
         <TaskQueue worker={profile} self />
       </section>
       <WorkerDetails profile={profile} />
+      <MyRatings />
       <section className="card">
         <h2>Update location</h2>
         <LocationForm workerId="me" />
