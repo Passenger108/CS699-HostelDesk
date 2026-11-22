@@ -1,4 +1,5 @@
 import { Route, Routes } from "react-router-dom";
+import { AuditPage } from "../features/admin/AuditPage";
 import { PeoplePage } from "../features/admin/PeoplePage";
 import { LoginPage } from "../features/auth/LoginPage";
 import { RequestCleaningPage } from "../features/cleaning/RequestCleaningPage";
@@ -9,6 +10,7 @@ import { HostelStructurePage } from "../features/hostel/HostelStructurePage";
 import { HomePage } from "../features/home/HomePage";
 import { NotificationsPage } from "../features/notifications/NotificationsPage";
 import { ProfilePage } from "../features/profile/ProfilePage";
+import { ReportsPage } from "../features/reports/ReportsPage";
 import { SectionPage } from "../pages/SectionPage";
 import { WorkersPage } from "../features/workers/WorkersPage";
 import { useAuth } from "../features/auth/AuthContext";
@@ -69,6 +71,22 @@ export function AppRoutes() {
             element={
               <RequireRole roles={["SUPER_ADMIN"]}>
                 <PeoplePage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/reports"
+            element={
+              <RequireRole roles={["SUPERVISOR", "SUPER_ADMIN"]}>
+                <ReportsPage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/audit"
+            element={
+              <RequireRole roles={["SUPER_ADMIN"]}>
+                <AuditPage />
               </RequireRole>
             }
           />

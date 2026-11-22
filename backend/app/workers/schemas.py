@@ -1,6 +1,7 @@
 import math
 from datetime import datetime, timedelta
 
+from app.cleaning.feedback import rating_summary
 from app.cleaning.models import CleaningRequest
 from app.cleaning.models import RequestStatus as S
 from app.cleaning.workflow import STATUS_LABELS
@@ -60,6 +61,7 @@ def worker_dict(worker: User, now: datetime | None = None) -> dict:
         "busy_minutes": busy_minutes(tasks, now),
         "queue_warning": f"{late} of {len(rows)} tasks may be late." if late else None,
         "off_duty_requested_at": requested.isoformat() if requested else None,
+        "rating": rating_summary(worker.id),
     }
 
 

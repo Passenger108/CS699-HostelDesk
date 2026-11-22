@@ -19,6 +19,7 @@ export const NAVIGATION: Record<Role, NavItem[]> = {
   SUPERVISOR: [
     { path: '/', label: 'Operations' },
     { path: '/workers', label: 'Workers' },
+    { path: '/reports', label: 'Reports' },
     { path: '/settings', label: 'Profile' },
   ],
   SUPER_ADMIN: [
@@ -26,6 +27,8 @@ export const NAVIGATION: Record<Role, NavItem[]> = {
     { path: '/people', label: 'People' },
     { path: '/workers', label: 'Workers' },
     { path: '/structure', label: 'Hostel Structure' },
+    { path: '/reports', label: 'Reports' },
+    { path: '/audit', label: 'Audit' },
     { path: '/settings', label: 'Profile' },
   ],
 };

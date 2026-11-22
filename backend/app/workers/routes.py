@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify
 
 from app.auth.guards import current_user, roles_required
+from app.cleaning.feedback import worker_feedback
 from app.cleaning.routes import json_body
 from app.cleaning.schemas import SUPERVISOR_ROLES, request_dict, worker_offers
 from app.cleaning.service import (
@@ -28,6 +29,12 @@ offers_bp = Blueprint("worker_offers", __name__, url_prefix="/worker/offers")
 @roles_required(*SUPERVISOR_ROLES)
 def workers():
     return jsonify({"workers": list_workers()})
+
+
+@bp.get("/me/feedback")
+@roles_required(Role.WORKER)
+def my_feedback():
+    return jsonify({"feedback": worker_feedback(current_user())})
 
 
 @bp.patch("/me/location")
