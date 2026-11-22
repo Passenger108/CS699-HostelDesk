@@ -129,6 +129,10 @@ class CleaningRequest(IdMixin, TimestampMixin, db.Model):
     proofs: Mapped[list["ProofPhoto"]] = relationship(
         back_populates="request", order_by="ProofPhoto.id"
     )
+    messages: Mapped[list["TaskMessage"]] = relationship(
+        back_populates="request", order_by="TaskMessage.id"
+    )
+    feedback: Mapped["Feedback | None"] = relationship(back_populates="request")
 
     __mapper_args__ = {"version_id_col": lock_version}
 
@@ -191,6 +195,40 @@ class ProofPhoto(IdMixin, TimestampMixin, db.Model):
     uploaded_by: Mapped[User] = relationship()
 
 
+class TaskMessage(IdMixin, db.Model):
+    __tablename__ = "task_messages"
+
+    request_id: Mapped[int] = mapped_column(
+        ForeignKey("cleaning_requests.id"), nullable=False, index=True
+    )
+    sender_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    body: Mapped[str] = mapped_column(String(500), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+    request: Mapped[CleaningRequest] = relationship(back_populates="messages")
+    sender: Mapped[User] = relationship()
+
+
+class Feedback(IdMixin, db.Model):
+    __tablename__ = "feedback"
+
+    request_id: Mapped[int] = mapped_column(
+        ForeignKey("cleaning_requests.id"), unique=True, nullable=False
+    )
+    worker_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    rating: Mapped[int] = mapped_column(nullable=False)
+    comment: Mapped[str | None] = mapped_column(String(500))
+    submitted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+    request: Mapped[CleaningRequest] = relationship(back_populates="feedback")
+
+
 @event.listens_for(RequestEvent, "before_update")
-def _block_update(_mapper, _connection, _target):
-    raise RuntimeError("Request events cannot be changed.")
+@event.listens_for(TaskMessage, "before_update")
+@event.listens_for(Feedback, "before_update")
+def _block_update(_mapper, _connection, target):
+    raise RuntimeError(f"{type(target).__name__} rows cannot be changed.")
