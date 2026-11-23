@@ -2,6 +2,7 @@ import os
 
 from dotenv import load_dotenv
 from flask import Blueprint, Flask, jsonify
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from app.config import CONFIGS
 from app.extensions import cors, db, jwt, limiter, migrate
@@ -13,6 +14,7 @@ def create_app(config_name: str | None = None) -> Flask:
 
     app = Flask(__name__)
     app.config.from_object(CONFIGS[config_name]())
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)
 
     db.init_app(app)
     migrate.init_app(app, db, render_as_batch=True)
