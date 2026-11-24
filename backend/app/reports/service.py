@@ -7,10 +7,12 @@ from app.cleaning.models import CleaningRequest
 from app.cleaning.models import RequestStatus as S
 from app.cleaning.workflow import is_terminal
 from app.common.errors import fail
+from app.common.models import as_utc
 from app.common.time import hostel_now, week_start_at
 from app.extensions import db
 
 MONTH_PATTERN = re.compile(r"(\d{4})-(\d{2})")
+FIRST_MONTH = date(2026, 1, 1)
 CLEANED = frozenset({S.CLOSED_SUCCESSFUL, S.CLOSED_VALID_AFTER_REVIEW})
 NOT_DONE = frozenset({S.CLOSED_UNSATISFACTORY, S.STUDENT_UNAVAILABLE, S.EXPIRED})
 CANCELLED = frozenset({S.CANCELLED_BY_STUDENT, S.CANCELLED_BY_SUPERVISOR})
@@ -33,11 +35,15 @@ COLUMNS = {
 
 
 def parse_month(value: str | None, now: datetime | None = None) -> date:
+    last = hostel_now(now).date().replace(day=1)
     if not value:
-        return hostel_now(now).date().replace(day=1)
+        return last
     match = MONTH_PATTERN.fullmatch(value)
     if not match or not 1 <= int(match[2]) <= 12:
         raise fail("BAD_MONTH", "month")
+    low, high = f"{FIRST_MONTH:%Y-%m}", f"{last:%Y-%m}"
+    if not low <= value <= high:
+        raise fail("OUT_OF_RANGE", "month", label="Month", low=low, high=high)
     return date(int(match[1]), int(match[2]), 1)
 
 
@@ -86,12 +92,13 @@ def monthly_report(month: str | None = None, now: datetime | None = None) -> dic
     ).all()
     days, workers = {}, {}
     for row in rows:
-        days.setdefault(hostel_now(row.created_at).date(), []).append(row)
+        days.setdefault(hostel_now(as_utc(row.created_at)).date(), []).append(row)
         if row.assigned_worker:
             workers.setdefault(row.assigned_worker.name, []).append(row)
     return {
         "month": f"{first:%Y-%m}",
         "label": f"{first:%B %Y}",
+        "first_month": f"{FIRST_MONTH:%Y-%m}",
         "columns": {
             key: [{"key": k, "label": label} for k, label in cols] for key, cols in COLUMNS.items()
         },

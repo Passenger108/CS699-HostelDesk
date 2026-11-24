@@ -20,23 +20,23 @@ function readable(action: string) {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
+function today() {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(
+    new Date(),
+  );
+}
+
 function Target({ entry }: { entry: AuditEntry }) {
-  const label = entry.entity_type.replaceAll("_", " ");
   if (entry.entity_type === "cleaning_request" && entry.entity_id)
     return (
       <Link
         to={`/requests/${entry.entity_id}`}
         className="btn btn--ghost btn--small"
       >
-        Request {entry.entity_id}
+        {entry.entity_label}
       </Link>
     );
-  return (
-    <>
-      {label}
-      {entry.entity_id && ` ${entry.entity_id}`}
-    </>
-  );
+  return <>{entry.entity_label}</>;
 }
 
 function Details({ entry }: { entry: AuditEntry }) {
@@ -99,7 +99,8 @@ export function AuditPage() {
               {label}
               <input
                 type={type}
-                min={type === "number" ? 1 : undefined}
+                min={type === "number" ? 1 : data?.first_day}
+                max={type === "date" ? today() : undefined}
                 value={draft[key] ?? ""}
                 onChange={(e) => setDraft({ ...draft, [key]: e.target.value })}
               />

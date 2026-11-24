@@ -64,6 +64,7 @@ export function ReportsPage() {
           <input
             type="month"
             value={month}
+            min={data?.first_month}
             max={thisMonth()}
             onChange={(e) => setMonth(e.target.value)}
           />
