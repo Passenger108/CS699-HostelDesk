@@ -1,10 +1,13 @@
+import sqlite3
+
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import MetaData
+from sqlalchemy import MetaData, event
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase
 
 NAMING_CONVENTION = {
@@ -25,3 +28,11 @@ migrate = Migrate()
 jwt = JWTManager()
 limiter = Limiter(key_func=get_remote_address)
 cors = CORS()
+
+
+@event.listens_for(Engine, "connect")
+def _sqlite_foreign_keys(dbapi_connection, _record):
+    if isinstance(dbapi_connection, sqlite3.Connection):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()

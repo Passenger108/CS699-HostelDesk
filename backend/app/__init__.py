@@ -20,22 +20,36 @@ def create_app(config_name: str | None = None) -> Flask:
     limiter.init_app(app)
     cors.init_app(app, resources={r"/api/*": {"origins": app.config["CORS_ORIGINS"]}})
 
+    from app.cleaning import models as cleaning_models  # noqa: F401
+    from app.common import audit, settings  # noqa: F401
     from app.common.errors import register_error_handlers
+    from app.credits import models as credit_models  # noqa: F401
+    from app.notifications import models as notification_models  # noqa: F401
     from app.users import models  # noqa: F401
 
     register_error_handlers(app)
     _register_blueprints(app)
 
+    from app.cleaning.timers import start_timers
     from app.cli import register_cli
 
     register_cli(app)
+    app.before_request(lambda: start_timers(app))
     return app
 
 
 def _register_blueprints(app: Flask) -> None:
     from app.auth import guards  # noqa: F401
     from app.auth.routes import bp as auth_bp
+    from app.cleaning.routes import bp as cleaning_bp
+    from app.credits.routes import bp as credits_bp
+    from app.hostel_structure.routes import bp as hostel_bp
+    from app.notifications.routes import bp as notifications_bp
+    from app.reports.routes import bp as reports_bp
+    from app.users.admin_routes import bp as admin_bp
     from app.users.routes import bp as users_bp
+    from app.workers.routes import bp as workers_bp
+    from app.workers.routes import offers_bp
 
     api = Blueprint("api", __name__, url_prefix="/api/v1")
 
@@ -45,4 +59,12 @@ def _register_blueprints(app: Flask) -> None:
 
     api.register_blueprint(auth_bp)
     api.register_blueprint(users_bp)
+    api.register_blueprint(hostel_bp)
+    api.register_blueprint(credits_bp)
+    api.register_blueprint(cleaning_bp)
+    api.register_blueprint(notifications_bp)
+    api.register_blueprint(workers_bp)
+    api.register_blueprint(offers_bp)
+    api.register_blueprint(admin_bp)
+    api.register_blueprint(reports_bp)
     app.register_blueprint(api)

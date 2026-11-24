@@ -1,25 +1,195 @@
 from flask import Flask, jsonify
 from werkzeug.exceptions import HTTPException
 
+TEXT_LIMIT = 500
+
 
 class ApiError(Exception):
-    def __init__(self, status: int, code: str, message: str):
+    def __init__(self, status: int, code: str, message: str, field: str | None = None):
         super().__init__(message)
         self.status = status
         self.code = code
         self.message = message
+        self.field = field
 
 
-def error_response(status: int, code: str, message: str):
-    return jsonify({"error": {"code": code, "message": message}}), status
+ERRORS = {
+    "BAD_TIME": (400, "{label} must be a time like 14:30.", "INVALID_AVAILABILITY"),
+    "BAD_MODE": (
+        400,
+        "Choose when you are available: now, a time window or any time today.",
+        "INVALID_AVAILABILITY",
+    ),
+    "DAY_OVER": (
+        400,
+        "Today is over. Please send the request again after midnight.",
+        "INVALID_AVAILABILITY",
+    ),
+    "WINDOW_ORDER": (400, "The start time must be before the end time.", "INVALID_AVAILABILITY"),
+    "WINDOW_PAST": (400, "The time window cannot start in the past.", "INVALID_AVAILABILITY"),
+    "KEY_TOO_LONG": (400, "client_key can be at most {limit} characters.", "INVALID_FIELD"),
+    "BAD_LOCK_VERSION": (400, "lock_version must be a whole number.", "INVALID_FIELD"),
+    "BAD_STUDENT_PRIORITY": (400, "Priority must be normal or urgent.", "INVALID_PRIORITY"),
+    "EMERGENCY_FOR_STAFF": (
+        400,
+        "Only a supervisor can mark a request as an emergency.",
+        "INVALID_PRIORITY",
+    ),
+    "BAD_PRIORITY": (400, "Priority must be normal, urgent or emergency.", "INVALID_PRIORITY"),
+    "URGENT_REASON_REQUIRED": (400, "Tell us why this request is urgent."),
+    "CHANGE_REASON": (400, "Give a reason for the change.", "REASON_REQUIRED"),
+    "SETTING_REASON": (400, "A reason is required to change a setting.", "REASON_REQUIRED"),
+    "GOODWILL_REASON": (400, "A reason is required for a goodwill credit.", "REASON_REQUIRED"),
+    "NO_CHANGE": (400, "Choose a new priority or time."),
+    "UNKNOWN_FILTER": (400, "Unknown {label}: {value}.", "INVALID_FILTER"),
+    "NOT_WHOLE": (400, "{label} must be a whole number.", "INVALID_FILTER"),
+    "OUT_OF_RANGE": (400, "{label} must be between {low} and {high}.", "INVALID_FILTER"),
+    "UNKNOWN_SETTING": (400, "There is no setting called {key}."),
+    "NOT_A_STUDENT": (400, "Goodwill credits can only be given to students."),
+    "HOSTEL_NOT_FOUND": (404, "The hostel structure has not been set up yet."),
+    "REQUEST_NOT_FOUND": (404, "This request does not exist."),
+    "NOTIFICATION_NOT_FOUND": (404, "This notification does not exist."),
+    "PROFILE_INCOMPLETE": (409, "Your profile has no room yet. Please contact the hostel office."),
+    "PHONE_REQUIRED": (409, "Your profile has no phone number. Please contact the hostel office."),
+    "ACTIVE_REQUEST_EXISTS": (409, "You already have an active cleaning request."),
+    "NO_CREDIT": (409, "You have no cleaning credit available."),
+    "NORMAL_NEEDS_CREDIT": (
+        409,
+        "This request has no credit reserved, so it must stay urgent or emergency.",
+        "NO_CREDIT",
+    ),
+    "ALREADY_RESERVED": (409, "A credit is already reserved for this request."),
+    "NO_RESERVATION": (409, "No credit is reserved for this request."),
+    "CANNOT_CANCEL": (409, "This request can no longer be cancelled."),
+    "CANNOT_APPROVE": (409, "This request is not waiting for approval."),
+    "CANNOT_CHANGE": (
+        409,
+        "Priority and time can change only before the request is offered to a worker.",
+    ),
+    "ILLEGAL_TRANSITION": (409, "This request cannot move from {old} to {new}."),
+    "STALE_REQUEST": (409, "This request was updated by {who}. Please refresh."),
+    "BAD_LOCATION": (400, "Choose a floor and wing from the list.", "INVALID_LOCATION"),
+    "LOCATION_REASON": (400, "Give a reason for correcting the location.", "REASON_REQUIRED"),
+    "WORKER_NOT_FOUND": (404, "This worker does not exist."),
+    "WORKER_OFF_DUTY": (409, "This worker is off duty and cannot get offers."),
+    "CANNOT_OFFER": (409, "Only an approved request that is waiting for a worker can be offered."),
+    "OFFER_NOT_FOUND": (404, "This offer does not exist."),
+    "OFFER_CLOSED": (409, "This offer is no longer open."),
+    "OFFER_EXPIRED": (409, "The time to answer this offer has run out."),
+    "BAD_ETA": (400, "Choose an arrival time from 5 to 120 minutes, in steps of 5.", "INVALID_ETA"),
+    "DECLINE_REASON": (400, "Give a reason for declining.", "REASON_REQUIRED"),
+    "CANCEL_REASON": (400, "Give a reason for cancelling.", "REASON_REQUIRED"),
+    "REASSIGN_REASON": (400, "Give a reason for taking the task back.", "REASON_REQUIRED"),
+    "CANNOT_REASSIGN": (409, "Only an offered or accepted request can be taken back."),
+    "BAD_QUEUE": (400, "order must be a list of request ids.", "INVALID_FIELD"),
+    "QUEUE_CHANGED": (409, "The task list changed. Please refresh and try again."),
+    "ALREADY_OFF_DUTY": (409, "You are already off duty."),
+    "OFF_DUTY_ON_SITE": (409, "Finish your current task before going off duty."),
+    "NO_OFF_DUTY_REQUEST": (409, "This worker has not asked to go off duty."),
+    "WRONG_STEP": (409, "This step is not possible now. The task is {status}."),
+    "TOO_EARLY": (409, "It is too early for this step. You can do it from {time}."),
+    "ANOTHER_TASK_ACTIVE": (409, "Finish your current task first."),
+    "NOT_NEXT_TASK": (409, "Room {room} is first in your queue. Do it first or move this task up."),
+    "BAD_ANSWER": (400, "answer must be COME_IN, WAIT or CANCEL.", "INVALID_FIELD"),
+    "RESPONSE_CLOSED": (409, "The time to answer at the door has run out."),
+    "WAIT_USED": (409, "Waiting can be asked only once, as the first answer."),
+    "NO_WAIT_ASKED": (409, "The student has not asked you to wait."),
+    "NOT_LET_IN": (409, "Wait until the student says Come in."),
+    "STUDENT_ANSWERED": (409, "The student has answered, so this cannot be closed as no answer."),
+    "STILL_WAITING": (409, "The student can still answer until {time}."),
+    "PROBLEM_REASON": (400, "Describe the problem.", "REASON_REQUIRED"),
+    "RESOLVE_REASON": (400, "Give a reason for your decision.", "REASON_REQUIRED"),
+    "BAD_DECISION": (400, "decision must be resume or reassign.", "INVALID_FIELD"),
+    "WORKER_AT_OTHER_ROOM": (409, "This worker is busy at another room. Try again later."),
+    "NOT_LATE_YET": (409, "The worker is not late yet. You can report a delay from {time}."),
+    "NO_DELAY": (409, "There is no reported delay to deal with."),
+    "RESCHEDULE_CLOSED": (409, "The time to choose a new time has run out."),
+    "PHOTO_REQUIRED": (400, "Add a photo of the cleaned room.", "INVALID_PHOTO"),
+    "PHOTO_TOO_BIG": (400, "The photo can be at most 10 MB.", "INVALID_PHOTO"),
+    "BAD_PHOTO": (400, "The photo must be a JPEG, PNG or WebP picture.", "INVALID_PHOTO"),
+    "BAD_CHECKLIST": (400, "checklist must list each item as true or false.", "INVALID_FIELD"),
+    "CHECKLIST_INCOMPLETE": (409, "Tick every checklist item before marking the room clean."),
+    "NO_PROOF": (409, "Add a photo of the cleaned room before marking it clean."),
+    "CONFIRM_CLOSED": (409, "The time to confirm or dispute has run out."),
+    "DISPUTE_REASON": (400, "Say what is wrong with the cleaning.", "REASON_REQUIRED"),
+    "BAD_OUTCOME": (400, "outcome must be valid or unsatisfactory.", "INVALID_FIELD"),
+    "GOODWILL_ONLY_UNSATISFACTORY": (
+        409,
+        "A goodwill credit can only be given when the work was unsatisfactory.",
+    ),
+    "PROOF_HIDDEN": (404, "There is no photo to show for this request."),
+    "BAD_ROLE": (400, "role must be STUDENT, WORKER, SUPERVISOR or SUPER_ADMIN.", "INVALID_FIELD"),
+    "FIELD_REQUIRED": (400, "{label} is required.", "INVALID_FIELD"),
+    "FIELD_TOO_LONG": (400, "{label} can be at most {limit} characters.", "INVALID_FIELD"),
+    "LOGIN_TAKEN": (409, "The login ID {login_id} is already used."),
+    "ROLL_TAKEN": (409, "The roll number {value} is already used."),
+    "EMPLOYEE_TAKEN": (409, "The employee ID {value} is already used."),
+    "ROOM_NOT_FOUND": (400, "There is no room {room}.", "INVALID_FIELD"),
+    "ROOM_FULL": (409, "Room {room} already has {limit} students."),
+    "BAD_FORMAT": (400, "{label} {rule}", "INVALID_FIELD"),
+    "VALUE_TAKEN": (409, "The {label} {value} is already used by another account."),
+    "SHORT_PASSWORD": (400, "The password must be at least {length} characters.", "INVALID_FIELD"),
+    "BAD_STATUS": (400, "account_status must be ACTIVE or DISABLED.", "INVALID_FIELD"),
+    "USER_NOT_FOUND": (404, "This account does not exist."),
+    "OWN_ACCOUNT": (409, "You cannot disable your own account."),
+    "HAS_ACTIVE_WORK": (
+        409,
+        "This account still has active cleaning work. Finish or move it first.",
+    ),
+    "CHAT_NOT_OPEN": (409, "The chat opens when a worker accepts the task."),
+    "CHAT_CLOSED": (409, "This request is closed, so the chat is read-only."),
+    "CHAT_READ_ONLY": (403, "The Super Admin can read task chats but cannot send messages."),
+    "MESSAGE_REQUIRED": (400, "Write a message first.", "INVALID_FIELD"),
+    "BAD_RATING": (400, "rating must be a whole number from 1 to 5.", "INVALID_FIELD"),
+    "COMMENT_REQUIRED": (400, "Say what went wrong when you give 1 or 2 stars.", "REASON_REQUIRED"),
+    "FEEDBACK_NOT_OPEN": (409, "You can rate the cleaning once it is closed as cleaned."),
+    "FEEDBACK_SUBMITTED": (409, "You have already rated this cleaning."),
+    "FEEDBACK_DISABLED_DISPUTE": (409, "A disputed cleaning cannot be rated."),
+    "FEEDBACK_EXPIRED": (409, "The 24 hours to rate this cleaning have passed."),
+    "BAD_MONTH": (400, "month must look like 2026-11.", "INVALID_FILTER"),
+    "BAD_DATE": (400, "{label} must be a date like 2026-11-21.", "INVALID_FILTER"),
+    "BAD_TABLE": (400, "table must be days or workers.", "INVALID_FILTER"),
+    "CLEANING_STARTED": (
+        409,
+        "Cleaning has started, so it cannot go to another worker. Let it continue or cancel it.",
+    ),
+}
+
+
+def fail(key: str, field: str | None = None, /, **values) -> ApiError:
+    status, message, *code = ERRORS[key]
+    return ApiError(status, code[0] if code else key, message.format(**values), field)
+
+
+def clean_text(value: str | None, field: str, label: str) -> str | None:
+    value = (value or "").strip()
+    if len(value) > TEXT_LIMIT:
+        raise ApiError(
+            400,
+            f"{field.upper()}_TOO_LONG",
+            f"{label} can be at most {TEXT_LIMIT} characters.",
+            field=field,
+        )
+    return value or None
+
+
+def error_response(status: int, code: str, message: str, field: str | None = None):
+    error = {"code": code, "message": message}
+    if field:
+        error["field"] = field
+    return jsonify({"error": error}), status
 
 
 def register_error_handlers(app: Flask) -> None:
     @app.errorhandler(ApiError)
     def handle_api_error(err: ApiError):
-        return error_response(err.status, err.code, err.message)
+        return error_response(err.status, err.code, err.message, err.field)
 
     @app.errorhandler(HTTPException)
     def handle_http_error(err: HTTPException):
+        if err.code == 429:
+            return error_response(
+                429, "TOO_MANY_REQUESTS", "Too many attempts. Please wait a minute and try again."
+            )
         code = (err.name or "error").upper().replace(" ", "_")
         return error_response(err.code or 500, code, err.description or err.name)

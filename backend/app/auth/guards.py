@@ -1,9 +1,11 @@
 from collections.abc import Callable
 from functools import wraps
 
+from flask import request
 from flask_jwt_extended import current_user as _jwt_current_user
 from flask_jwt_extended import verify_jwt_in_request
 
+from app.common.audit import record_security_event
 from app.common.errors import ApiError
 from app.extensions import db, jwt
 from app.users.models import AccountStatus, Role, User
@@ -75,7 +77,15 @@ def roles_required(*roles: Role) -> Callable:
         @wraps(fn)
         def wrapper(*args, **kwargs):
             verify_jwt_in_request()
-            if current_user().role not in roles:
+            user = current_user()
+            if user.role not in roles:
+                record_security_event(
+                    "FORBIDDEN",
+                    "route",
+                    request.path,
+                    actor=user,
+                    detail={"method": request.method, "role": user.role.value},
+                )
                 raise ApiError(403, "FORBIDDEN", "You do not have permission for this action.")
             return fn(*args, **kwargs)
 

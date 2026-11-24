@@ -1,8 +1,27 @@
-import { Route, Routes } from 'react-router-dom';
-import { LoginPage } from '../features/auth/LoginPage';
-import { SectionPage } from '../pages/SectionPage';
-import { AppShell } from './AppShell';
-import { RequireAuth } from './RequireAuth';
+import { Route, Routes } from "react-router-dom";
+import { AuditPage } from "../features/admin/AuditPage";
+import { PeoplePage } from "../features/admin/PeoplePage";
+import { LoginPage } from "../features/auth/LoginPage";
+import { RequestCleaningPage } from "../features/cleaning/RequestCleaningPage";
+import { HistoryPage } from "../features/cleaning/HistoryPage";
+import { RequestDetailPage } from "../features/cleaning/RequestDetailPage";
+import { CreditsPage } from "../features/credits/CreditsPage";
+import { HostelStructurePage } from "../features/hostel/HostelStructurePage";
+import { HomePage } from "../features/home/HomePage";
+import { NotificationsPage } from "../features/notifications/NotificationsPage";
+import { ProfilePage } from "../features/profile/ProfilePage";
+import { ReportsPage } from "../features/reports/ReportsPage";
+import { SectionPage } from "../pages/SectionPage";
+import { WorkersPage } from "../features/workers/WorkersPage";
+import { useAuth } from "../features/auth/AuthContext";
+import { AppShell } from "./AppShell";
+import { RequireAuth } from "./RequireAuth";
+import { RequireRole } from "./RequireRole";
+
+function HistoryRoute() {
+  const { user } = useAuth();
+  return user?.role === "STUDENT" ? <HistoryPage /> : <SectionPage />;
+}
 
 export function AppRoutes() {
   return (
@@ -10,6 +29,67 @@ export function AppRoutes() {
       <Route path="/login" element={<LoginPage />} />
       <Route element={<RequireAuth />}>
         <Route element={<AppShell />}>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/settings" element={<ProfilePage />} />
+          <Route path="/notifications" element={<NotificationsPage />} />
+          <Route path="/history" element={<HistoryRoute />} />
+          <Route path="/requests/:requestId" element={<RequestDetailPage />} />
+          <Route
+            path="/credits"
+            element={
+              <RequireRole roles={["STUDENT"]}>
+                <CreditsPage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/request"
+            element={
+              <RequireRole roles={["STUDENT"]}>
+                <RequestCleaningPage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/structure"
+            element={
+              <RequireRole roles={["SUPER_ADMIN"]}>
+                <HostelStructurePage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/workers"
+            element={
+              <RequireRole roles={["SUPERVISOR", "SUPER_ADMIN"]}>
+                <WorkersPage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/people"
+            element={
+              <RequireRole roles={["SUPER_ADMIN"]}>
+                <PeoplePage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/reports"
+            element={
+              <RequireRole roles={["SUPERVISOR", "SUPER_ADMIN"]}>
+                <ReportsPage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/audit"
+            element={
+              <RequireRole roles={["SUPER_ADMIN"]}>
+                <AuditPage />
+              </RequireRole>
+            }
+          />
           <Route path="*" element={<SectionPage />} />
         </Route>
       </Route>
