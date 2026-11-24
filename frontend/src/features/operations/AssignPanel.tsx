@@ -46,6 +46,9 @@ export function AssignPanel({ request }: { request: CleaningRequest }) {
           <span>
             <strong>{worker.name}</strong> · {reason}{" "}
             <span className="error">{warnings.join(" ")}</span>
+            {warnings.length > 0 && worker.phone && (
+              <a href={`tel:${worker.phone}`}>Call {worker.phone}</a>
+            )}
           </span>
         </label>
       ))}

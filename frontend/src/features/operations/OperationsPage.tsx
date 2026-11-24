@@ -51,6 +51,8 @@ function RequestDrawer({ id, onClose }: { id: number; onClose: () => void }) {
   const { data, error } = useQuery({
     queryKey: ["cleaning", "request", id],
     queryFn: () => fetchRequest(id),
+    refetchInterval: 10_000,
+    refetchOnMount: "always",
   });
   return (
     <aside className="drawer card request-card" aria-label="Request details">

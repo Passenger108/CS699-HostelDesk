@@ -33,9 +33,7 @@ export function MyRatings() {
           ))}
         </ul>
       )}
-      <p className="muted">
-        Students rate anonymously, so you never see who wrote what or when.
-      </p>
+      <p className="muted">Ratings are anonymous.</p>
     </section>
   );
 }
