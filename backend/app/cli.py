@@ -70,7 +70,6 @@ DEMO_REQUESTS = [
     ("demo.student5", "ANY_TIME_TODAY", "NORMAL", None, True),
     ("demo.student6", "AVAILABLE_NOW", "NORMAL", None, False),
 ]
-GUARDIAN = "Parent, +91 90000 00000"
 DEMO_LOCATIONS = {"demo.worker": (5, "E"), "demo.worker2": (4, "D")}
 
 
@@ -83,9 +82,8 @@ def _seed_profile(user: User) -> bool:
     if user.login_id in DEMO_STUDENTS:
         roll_number, room_number = DEMO_STUDENTS[user.login_id]
         profile = user.student_profile or StudentProfile(room=find_room(room_number))
-        wanted = (roll_number, GUARDIAN)
-        changed = (profile.roll_number, profile.guardian_contact) != wanted
-        profile.roll_number, profile.guardian_contact = wanted
+        changed = profile.roll_number != roll_number
+        profile.roll_number = roll_number
         user.student_profile = profile
         return changed
     if user.login_id in DEMO_WORKERS:
