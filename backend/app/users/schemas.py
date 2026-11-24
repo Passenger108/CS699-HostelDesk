@@ -11,14 +11,10 @@ ROLE_LABELS = {
 }
 
 
-def profile_dict(user: User, viewer: User | None = None) -> dict | None:
-    viewer = viewer or user
+def profile_dict(user: User) -> dict | None:
     if user.role == Role.STUDENT and user.student_profile:
         profile = user.student_profile
-        data = {"roll_number": profile.roll_number, "room": room_dict(profile.room)}
-        if viewer.role == Role.SUPER_ADMIN:
-            data["guardian_contact"] = profile.guardian_contact
-        return data
+        return {"roll_number": profile.roll_number, "room": room_dict(profile.room)}
     if user.role == Role.WORKER and user.worker_profile:
         return worker_dict(user)
     return None

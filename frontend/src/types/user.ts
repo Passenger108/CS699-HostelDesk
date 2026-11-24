@@ -28,7 +28,6 @@ export interface NewAccount {
   email?: string;
   roll_number?: string;
   room?: string;
-  guardian_contact?: string;
   employee_id?: string;
   shift?: string;
 }

@@ -5,7 +5,7 @@ import { apiFetch } from "./client";
 type AccountResponse = { user: Account };
 
 export const fetchAccounts = () =>
-  apiFetch<{ users: Account[] }>("/admin/users");
+  apiFetch<{ users: Account[]; shifts: string[] }>("/admin/users");
 
 export const createAccount = (body: NewAccount) =>
   apiFetch<AccountResponse>("/admin/users", {
