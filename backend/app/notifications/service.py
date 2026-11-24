@@ -51,6 +51,10 @@ TEMPLATES = {
         "You are off duty",
         "{count} of your tasks went back to the supervisor.",
     ),
+    "OFF_DUTY_DECLINED": (
+        "Off duty not approved",
+        "The supervisor needs you on duty for now. Your tasks stay with you.",
+    ),
     "WORKER_EN_ROUTE": ("Worker on the way", "{worker} is on the way to room {room}."),
     "WORKER_ARRIVED": (
         "Worker at your door",
