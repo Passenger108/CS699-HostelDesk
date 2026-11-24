@@ -39,25 +39,6 @@ function Target({ entry }: { entry: AuditEntry }) {
   return <>{entry.entity_label}</>;
 }
 
-function Details({ entry }: { entry: AuditEntry }) {
-  const parts = [
-    ["Before", entry.before],
-    ["After", entry.after],
-  ].filter(([, value]) => value !== null && value !== undefined);
-  if (parts.length === 0 && !entry.ip_address) return <>—</>;
-  return (
-    <details>
-      <summary>Show</summary>
-      {parts.map(([label, value]) => (
-        <pre key={String(label)} className="audit-json">
-          {String(label)}: {JSON.stringify(value, null, 1)}
-        </pre>
-      ))}
-      {entry.ip_address && <p className="muted">From {entry.ip_address}</p>}
-    </details>
-  );
-}
-
 export function AuditPage() {
   const [draft, setDraft] = useState<AuditFilters>({});
   const [filters, setFilters] = useState<AuditFilters>({ page: 1 });
@@ -141,7 +122,6 @@ export function AuditPage() {
                 <th scope="col">Action</th>
                 <th scope="col">On</th>
                 <th scope="col">Reason</th>
-                <th scope="col">Details</th>
               </tr>
             </thead>
             <tbody>
@@ -154,9 +134,6 @@ export function AuditPage() {
                     <Target entry={entry} />
                   </td>
                   <td>{entry.reason ?? "—"}</td>
-                  <td>
-                    <Details entry={entry} />
-                  </td>
                 </tr>
               ))}
             </tbody>
