@@ -1,4 +1,4 @@
-from datetime import datetime, time
+from datetime import datetime, time, timezone
 from io import BytesIO
 
 import click
@@ -254,7 +254,8 @@ def register_cli(app: Flask) -> None:
         help="Run as if it were this date (YYYY-MM-DD), for demos and testing.",
     )
     def grant_weekly_credits_command(on_date):
-        now = datetime.combine(on_date.date(), time(12), tzinfo=HOSTEL_TZ) if on_date else None
+        noon = datetime.combine(on_date.date(), time(12), tzinfo=HOSTEL_TZ) if on_date else None
+        now = noon and noon.astimezone(timezone.utc)
         summary = grant_weekly_credits(now)
         db.session.commit()
         click.echo(f"Weekly credits: {_summary_text(summary)}")
