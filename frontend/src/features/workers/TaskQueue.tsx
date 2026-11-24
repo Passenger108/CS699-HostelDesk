@@ -30,17 +30,16 @@ export function TaskQueue({
     onSettled,
   });
   const offDuty = worker.availability === "OFF_DUTY";
-  const dutyPath = self
+  const dutyButtons = self
     ? offDuty
-      ? "me/on-duty"
-      : !worker.off_duty_requested_at && "me/off-duty-request"
+      ? ([["me/on-duty", "Back on duty"]] as const)
+      : !worker.off_duty_requested_at &&
+        ([["me/off-duty-request", "Ask to go off duty"]] as const)
     : worker.off_duty_requested_at &&
-      (`${worker.id}/off-duty/approve` as const);
-  const dutyLabel = self
-    ? offDuty
-      ? "Back on duty"
-      : "Ask to go off duty"
-    : "Approve off duty";
+      ([
+        [`${worker.id}/off-duty/approve`, "Approve off duty"],
+        [`${worker.id}/off-duty/decline`, "Decline off duty"],
+      ] as const);
 
   return (
     <div className="stack">
@@ -93,15 +92,20 @@ export function TaskQueue({
       {!self && worker.off_duty_requested_at && (
         <p className="muted">Asked to go off duty.</p>
       )}
-      {dutyPath && (
-        <button
-          type="button"
-          className="btn btn--ghost"
-          disabled={duty.isPending}
-          onClick={() => duty.mutate(dutyPath)}
-        >
-          {dutyLabel}
-        </button>
+      {dutyButtons && (
+        <div className="choice-row">
+          {dutyButtons.map(([path, label]) => (
+            <button
+              key={path}
+              type="button"
+              className="btn btn--ghost"
+              disabled={duty.isPending}
+              onClick={() => duty.mutate(path)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       )}
       {[move, duty].map(
         (m, i) =>
