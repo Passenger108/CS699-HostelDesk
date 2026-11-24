@@ -5,6 +5,7 @@ export interface AuditEntry {
   action: string;
   entity_type: string;
   entity_id: string | null;
+  entity_label: string;
   actor: Person | null;
   reason: string | null;
   before: unknown;
@@ -15,6 +16,7 @@ export interface AuditEntry {
 
 export interface AuditPage {
   entries: AuditEntry[];
+  first_day: string;
   page: number;
   per_page: number;
   total: number;

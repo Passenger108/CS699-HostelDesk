@@ -4,6 +4,7 @@ import type { WorkerProfile } from "./profile";
 export interface Worker extends WorkerProfile {
   id: number;
   name: string;
+  phone: string | null;
   tasks: QueueTask[];
   queue_warning: string | null;
   off_duty_requested_at: string | null;
