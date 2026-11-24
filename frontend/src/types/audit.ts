@@ -8,9 +8,6 @@ export interface AuditEntry {
   entity_label: string;
   actor: Person | null;
   reason: string | null;
-  before: unknown;
-  after: unknown;
-  ip_address: string | null;
   created_at: string;
 }
 

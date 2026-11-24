@@ -680,9 +680,3 @@ h3 {
 .star:hover {
   border-color: var(--color-primary);
 }
-
-.audit-json {
-  white-space: pre-wrap;
-  font-size: 0.8rem;
-  margin: 0.25rem 0;
-}
