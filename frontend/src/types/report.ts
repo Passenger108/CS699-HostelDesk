@@ -8,6 +8,7 @@ export interface Column {
 export interface CleaningReport {
   month: string;
   label: string;
+  first_month: string;
   columns: { days: Column[]; workers: Column[] };
   totals: ReportRow;
   days: ReportRow[];

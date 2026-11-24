@@ -70,9 +70,7 @@ function WorkerFinish({ request }: { request: CleaningRequest }) {
         />
       </label>
       <p className="muted">
-        On a phone this opens the camera; on a laptop choose a saved picture.
-        Show only the room: no people, faces or papers. JPEG, PNG or WebP, up to
-        10 MB.
+        Take or choose a photo: JPEG, PNG or WebP, up to 10 MB.
       </p>
       <div className="choice-row">
         <button

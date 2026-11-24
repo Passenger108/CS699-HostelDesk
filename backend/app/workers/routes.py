@@ -7,6 +7,7 @@ from app.cleaning.schemas import SUPERVISOR_ROLES, request_dict, worker_offers
 from app.cleaning.service import (
     accept_offer,
     approve_off_duty,
+    decline_off_duty,
     decline_offer,
     get_offer_for,
     reorder_queue,
@@ -80,10 +81,11 @@ def on_duty():
     return jsonify({"worker": worker_dict(return_to_duty(current_user()))})
 
 
-@bp.post("/<int:worker_id>/off-duty/approve")
+@bp.post("/<int:worker_id>/off-duty/<any(approve, decline):answer>")
 @roles_required(*SUPERVISOR_ROLES)
-def off_duty(worker_id: int):
-    return jsonify({"worker": worker_dict(approve_off_duty(worker_id, current_user()))})
+def off_duty(worker_id: int, answer: str):
+    decide = approve_off_duty if answer == "approve" else decline_off_duty
+    return jsonify({"worker": worker_dict(decide(worker_id, current_user()))})
 
 
 @offers_bp.get("")

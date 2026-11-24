@@ -59,7 +59,10 @@ export const reorderQueue = (id: number | "me", order: number[]) =>
   });
 
 export const changeDuty = (
-  path: "me/off-duty-request" | "me/on-duty" | `${number}/off-duty/approve`,
+  path:
+    | "me/off-duty-request"
+    | "me/on-duty"
+    | `${number}/off-duty/${"approve" | "decline"}`,
 ) => apiFetch<{ worker: Worker }>(`/workers/${path}`, { method: "POST" });
 
 export const fetchMyFeedback = () =>

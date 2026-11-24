@@ -606,11 +606,25 @@ def reorder_queue(worker: User, actor: User, order) -> User:
     return worker
 
 
-def approve_off_duty(worker_id, supervisor: User) -> User:
+def _off_duty_request(worker_id) -> User:
     worker = get_worker(worker_id)
-    profile = worker.worker_profile
-    if profile.off_duty_requested_at is None:
+    if worker.worker_profile.off_duty_requested_at is None:
         raise fail("NO_OFF_DUTY_REQUEST")
+    return worker
+
+
+def decline_off_duty(worker_id, supervisor: User) -> User:
+    worker = _off_duty_request(worker_id)
+    worker.worker_profile.off_duty_requested_at = None
+    record_audit("OFF_DUTY_DECLINED", "worker", worker.id, actor=supervisor)
+    notify(worker, "OFF_DUTY_DECLINED", {})
+    db.session.commit()
+    return worker
+
+
+def approve_off_duty(worker_id, supervisor: User) -> User:
+    worker = _off_duty_request(worker_id)
+    profile = worker.worker_profile
     work = db.session.scalars(
         db.select(CleaningRequest).filter(
             CleaningRequest.assigned_worker_id == worker.id,
