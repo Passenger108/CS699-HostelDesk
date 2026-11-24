@@ -10,25 +10,26 @@ import type { Account, NewAccount, Role } from "../../types/user";
 import { ROLE_LABELS } from "../../app/navigation";
 import { useAuth } from "../auth/AuthContext";
 
-type Field = [key: keyof NewAccount, label: string, type?: string];
+type Field = [
+  key: keyof NewAccount,
+  label: string,
+  placeholder: string,
+  type?: string,
+];
 
 const COMMON: Field[] = [
-  ["name", "Full name"],
-  ["login_id", "Login ID"],
-  ["password", "First password (at least 12 characters)", "password"],
-  ["phone", "Phone"],
-  ["email", "Email", "email"],
+  ["name", "Full name", "Riya Sharma (letters only)"],
+  ["login_id", "Login ID", "riya.sharma (3 to 30: a-z, 0-9, . _ -)"],
+  ["password", "First password", "At least 12 characters", "password"],
+  ["phone", "Phone", "+91 98765 43210 (Indian mobile)", "tel"],
+  ["email", "Email (optional)", "riya@example.com", "email"],
 ];
 const BY_ROLE: Record<Role, Field[]> = {
   STUDENT: [
-    ["roll_number", "Roll number"],
-    ["room", "Room (for example A105)"],
-    ["guardian_contact", "Guardian contact"],
+    ["roll_number", "Roll number", "24B0001"],
+    ["room", "Room (at most 2 students)", "A105"],
   ],
-  WORKER: [
-    ["employee_id", "Employee ID"],
-    ["shift", "Shift"],
-  ],
+  WORKER: [["employee_id", "Employee ID", "W04"]],
   SUPERVISOR: [],
   SUPER_ADMIN: [],
 };
@@ -39,7 +40,7 @@ const EMPTY: NewAccount = {
   password: "",
 };
 
-function NewAccountForm() {
+function NewAccountForm({ shifts }: { shifts: string[] }) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState<NewAccount>(EMPTY);
   const create = useMutation({
@@ -76,16 +77,31 @@ function NewAccountForm() {
             ))}
           </select>
         </label>
-        {fields.map(([key, label, type]) => (
+        {fields.map(([key, label, placeholder, type]) => (
           <label key={key} className="text-field">
             {label}
             <input
               type={type ?? "text"}
+              placeholder={placeholder}
               value={form[key] ?? ""}
               onChange={(e) => setForm({ ...form, [key]: e.target.value })}
             />
           </label>
         ))}
+        {form.role === "WORKER" && (
+          <label className="text-field">
+            Shift
+            <select
+              value={form.shift ?? ""}
+              onChange={(e) => setForm({ ...form, shift: e.target.value })}
+            >
+              <option value="">Choose a shift</option>
+              {shifts.map((shift) => (
+                <option key={shift}>{shift}</option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
       <div className="choice-row">
         <button
@@ -154,7 +170,7 @@ export function PeoplePage() {
   return (
     <div className="stack">
       <h1>People</h1>
-      <NewAccountForm />
+      <NewAccountForm shifts={data?.shifts ?? []} />
       {isPending && <p className="page-loading">Loading…</p>}
       {error && (
         <ErrorMessage error={error} fallback="Could not load people." />

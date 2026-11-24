@@ -84,7 +84,6 @@ class StudentProfile(TimestampMixin, db.Model):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
     roll_number: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
     room_id: Mapped[int] = mapped_column(ForeignKey("rooms.id"), nullable=False)
-    guardian_contact: Mapped[str | None] = mapped_column(String(120))
 
     user: Mapped[User] = relationship(back_populates="student_profile")
     room: Mapped["Room"] = relationship()

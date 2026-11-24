@@ -37,32 +37,32 @@ TIMER_LABELS = {
 }
 DEMO_PASSWORD = "hosteldesk-demo-2026"
 DEMO_USERS = [
-    ("demo.student", Role.STUDENT, "Demo Student (fictional)"),
-    ("demo.worker", Role.WORKER, "Demo Worker (fictional)"),
-    ("demo.supervisor", Role.SUPERVISOR, "Demo Supervisor (fictional)"),
-    ("demo.admin", Role.SUPER_ADMIN, "Demo Super Admin (fictional)"),
-    ("demo.student2", Role.STUDENT, "Aarav Demo (fictional)"),
-    ("demo.student3", Role.STUDENT, "Diya Demo (fictional)"),
-    ("demo.student4", Role.STUDENT, "Kabir Demo (fictional)"),
-    ("demo.student5", Role.STUDENT, "Meera Demo (fictional)"),
-    ("demo.student6", Role.STUDENT, "Rohan Demo (fictional)"),
-    ("demo.student7", Role.STUDENT, "Isha Demo (fictional)"),
-    ("demo.worker2", Role.WORKER, "Sunil Demo (fictional)"),
-    ("demo.worker3", Role.WORKER, "Lata Demo (fictional)"),
+    ("demo.student", Role.STUDENT, "Nitin"),
+    ("demo.worker", Role.WORKER, "Patil"),
+    ("demo.supervisor", Role.SUPERVISOR, "Supervisor"),
+    ("demo.admin", Role.SUPER_ADMIN, "Super Admin"),
+    ("demo.student2", Role.STUDENT, "Aarav"),
+    ("demo.student3", Role.STUDENT, "Diya"),
+    ("demo.student4", Role.STUDENT, "Kabir"),
+    ("demo.student5", Role.STUDENT, "Meera"),
+    ("demo.student6", Role.STUDENT, "Rohan"),
+    ("demo.student7", Role.STUDENT, "Isha"),
+    ("demo.worker2", Role.WORKER, "Sunil"),
+    ("demo.worker3", Role.WORKER, "Lata"),
 ]
 DEMO_STUDENTS = {
-    "demo.student": ("DEMO24B001", "A105"),
-    "demo.student2": ("DEMO24B002", "B203"),
-    "demo.student3": ("DEMO24B003", "C307"),
-    "demo.student4": ("DEMO24B004", "D412"),
-    "demo.student5": ("DEMO24B005", "E509"),
-    "demo.student6": ("DEMO24B006", "F614"),
-    "demo.student7": ("DEMO24B007", "G708"),
+    "demo.student": ("24B0001", "A105"),
+    "demo.student2": ("24B0002", "B203"),
+    "demo.student3": ("24B0003", "C307"),
+    "demo.student4": ("24B0004", "D412"),
+    "demo.student5": ("24B0005", "E509"),
+    "demo.student6": ("24B0006", "F614"),
+    "demo.student7": ("24B0007", "G708"),
 }
 DEMO_WORKERS = {
-    "demo.worker": ("DEMO-W01", "Morning"),
-    "demo.worker2": ("DEMO-W02", "Morning"),
-    "demo.worker3": ("DEMO-W03", "Evening"),
+    "demo.worker": ("W01", "Morning"),
+    "demo.worker2": ("W02", "Morning"),
+    "demo.worker3": ("W03", "Evening"),
 }
 DEMO_REQUESTS = [
     ("demo.student3", "ANY_TIME_TODAY", "NORMAL", None, False),
@@ -79,18 +79,20 @@ def _demo_phone(login_id: str) -> str:
 
 
 def _seed_profile(user: User) -> bool:
-    if user.login_id in DEMO_STUDENTS and user.student_profile is None:
+    if user.login_id in DEMO_STUDENTS:
         roll_number, room_number = DEMO_STUDENTS[user.login_id]
-        user.student_profile = StudentProfile(
-            roll_number=roll_number,
-            room=find_room(room_number),
-            guardian_contact="Demo Guardian (fictional), +91 90000 00000",
-        )
-        return True
-    if user.login_id in DEMO_WORKERS and user.worker_profile is None:
+        profile = user.student_profile or StudentProfile(room=find_room(room_number))
+        changed = profile.roll_number != roll_number
+        profile.roll_number = roll_number
+        user.student_profile = profile
+        return changed
+    if user.login_id in DEMO_WORKERS:
         employee_id, shift = DEMO_WORKERS[user.login_id]
-        user.worker_profile = WorkerProfile(employee_id=employee_id, shift=shift)
-        return True
+        profile = user.worker_profile or WorkerProfile(shift=shift)
+        changed = profile.employee_id != employee_id
+        profile.employee_id = employee_id
+        user.worker_profile = profile
+        return changed
     return False
 
 
@@ -174,10 +176,9 @@ def register_cli(app: Flask) -> None:
         for login_id, role, name in DEMO_USERS:
             user = db.session.scalar(db.select(User).filter_by(login_id=login_id))
             if user:
-                added_phone = user.phone is None
-                if added_phone:
-                    user.phone = _demo_phone(login_id)
-                status = "updated " if _seed_profile(user) or added_phone else "exists  "
+                changed = user.phone is None or user.name != name
+                user.phone, user.name = user.phone or _demo_phone(login_id), name
+                status = "updated " if _seed_profile(user) or changed else "exists  "
                 click.echo(f"{status} {login_id}")
                 continue
             user = User(
