@@ -3,7 +3,6 @@ import type { LocationInfo, RoomInfo } from "./hostel";
 export interface StudentProfile {
   roll_number: string;
   room: RoomInfo | null;
-  guardian_contact?: string | null;
 }
 
 export interface WorkerProfile {

@@ -5,7 +5,7 @@ from app.cleaning.routes import json_body
 from app.reports.audit import audit_page
 from app.users.models import Role
 from app.users.schemas import account_dict
-from app.users.service import create_user, list_users, set_status
+from app.users.service import SHIFTS, create_user, list_users, set_status
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -13,7 +13,8 @@ bp = Blueprint("admin", __name__, url_prefix="/admin")
 @bp.get("/users")
 @roles_required(Role.SUPER_ADMIN)
 def users():
-    return jsonify({"users": [account_dict(user) for user in list_users(request.args.get("role"))]})
+    users = [account_dict(user) for user in list_users(request.args.get("role"))]
+    return jsonify({"users": users, "shifts": SHIFTS})
 
 
 @bp.post("/users")
